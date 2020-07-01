@@ -3,10 +3,10 @@
        O        O  A       A       55555  2222
       O O       O  A      A A      5          2
      O   O      O A      A   A     5          2
-    OOOOOOO     OA      AAAAAAA    5555    2222  
-   O       O    O A    A       A       5  2  
-  O         O   O  A  A         A  55555  22222  
-  Arbitrary  Kinetic  Algorithm  
+    OOOOOOO     OA      AAAAAAA    5555    2222
+   O       O    O A    A       A       5  2
+  O         O   O  A  A         A  55555  22222
+   Arbitrary  Kinetic  Algorithm  
 ***************************************************
 
 # AKA
