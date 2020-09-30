@@ -105,7 +105,7 @@ void ModelInitializer::readAllFromFile(){
                   memspaceAttr, weights);
         pusher->setParticleWeight4Type(spn, weights[rank]);
     }
-    delete weights;
+    delete[] weights;
     
     int totVarsOnG2 = gridMng->getVarsNumOnG2();
     hsize_t loc = g2nodes[rank];
@@ -132,7 +132,7 @@ void ModelInitializer::readAllFromFile(){
             H5Dclose(data);
             H5Sclose(memspace);
          }
-        delete field;
+        delete[] field;
     }
     
 
@@ -160,7 +160,7 @@ void ModelInitializer::readAllFromFile(){
             H5Dclose(data);
             H5Sclose(memspace);
         }
-        delete field;
+        delete[] field;
     }
     
     Particle** particles = pusher->getParticles();
@@ -189,13 +189,13 @@ void ModelInitializer::readAllFromFile(){
     H5Gclose(group);
     H5Fclose(file);
     
-    delete particlesFromFIle;
-    delete g2nodes;
-    delete g2offset;
-    delete g1nodes;
-    delete g1offset;
-    delete parts;
-    delete partOffset;
+    delete[] particlesFromFIle;
+    delete[] g2nodes;
+    delete[] g2offset;
+    delete[] g1nodes;
+    delete[] g1offset;
+    delete[] parts;
+    delete[] partOffset;
 
 }
 

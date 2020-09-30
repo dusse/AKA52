@@ -70,8 +70,10 @@ SimulationManager::SimulationManager(int ac, char **av) {
 
 void SimulationManager::initialize() {
     
+
     loader.reset(new Loader());
     loader->load();
+        
     gridMng.reset(new GridManager(loader));
     boundMng.reset(new BoundaryManager(loader));
     

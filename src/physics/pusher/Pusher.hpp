@@ -40,8 +40,7 @@ private:
     
     void initialize();
     
-    void checkParticle(int, Particle*, std::string);
-    void checkParticle(int, std::shared_ptr<Particle>, std::string);
+    int checkParticle(int, Particle*, std::string);
     
 public:
     Pusher(std::shared_ptr<Loader>,
@@ -67,9 +66,6 @@ public:
     void setParticleVelocity(int, double[6]);
     void setParticleVelocity(int, int, double);
     void setParticleType(int, int);
-    
-    void writeParticle2Log(int, int, int, int, int, double*,
-                           double*, double*, double*, double*, double* );
     
     Particle** getParticles();
     

@@ -13,21 +13,21 @@ GridManager::GridManager(shared_ptr<Loader> loader){
 
 
 GridManager::~GridManager(){
-    delete neibors4G2spatialDerX;
-    delete neibors4G2spatialDerY;
-    delete neibors4G2spatialDerZ;
-    delete negbors4PresX;
-    delete negbors4PresY;
-    delete negbors4PresZ;
-    delete negbors4LaplacX;
-    delete negbors4LaplacY;
-    delete negbors4LaplacZ;
-    delete neibors4G1spatialDerX;
-    delete neibors4G1spatialDerY;
-    delete neibors4G1spatialDerZ;
-    delete neighbourhood;
-    delete nodesG2vars;
-    delete nodesG1vars;
+    delete [] neibors4G2spatialDerX;
+    delete [] neibors4G2spatialDerY;
+    delete [] neibors4G2spatialDerZ;
+    delete [] negbors4PresX;
+    delete [] negbors4PresY;
+    delete [] negbors4PresZ;
+    delete [] negbors4LaplacX;
+    delete [] negbors4LaplacY;
+    delete [] negbors4LaplacZ;
+    delete [] neibors4G1spatialDerX;
+    delete [] neibors4G1spatialDerY;
+    delete [] neibors4G1spatialDerZ;
+    delete [] neighbourhood;
+    delete [] nodesG2vars;
+    delete [] nodesG1vars;
     
     for (int t = 0; t < 27; t++) {
         delete [] sendIdx4Gath[t];
@@ -605,8 +605,10 @@ void GridManager::initG2Nodes(){
                 VectorVar* current_aux = new VectorVar(CURRENT_AUX,  {0.0, 0.0, 0.0});
                 VectorVar* veloion     = new VectorVar(VELOCION,     {0.0, 0.0, 0.0});
                 VectorVar* densele     = new VectorVar(DENSELEC,     {0.0});
+                VectorVar* veloele     = new VectorVar(VELOCELE,     {0.0, 0.0, 0.0});
                 VectorVar* presure     = new VectorVar(PRESSURE,     {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* presure_aux = new VectorVar(PRESSURE_AUX, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* presure_smo = new VectorVar(PRESSURE_SMO, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* pdriver     = new VectorVar(DRIVER,       {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* pdriver_aux = new VectorVar(DRIVER_AUX,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 
@@ -618,8 +620,10 @@ void GridManager::initG2Nodes(){
                 nodesG2vars[G2nodesNumber*CURRENT_AUX +idx] = current_aux;
                 nodesG2vars[G2nodesNumber*VELOCION    +idx] = veloion;
                 nodesG2vars[G2nodesNumber*DENSELEC    +idx] = densele;
+                nodesG2vars[G2nodesNumber*VELOCELE    +idx] = veloele;
                 nodesG2vars[G2nodesNumber*PRESSURE    +idx] = presure;
                 nodesG2vars[G2nodesNumber*PRESSURE_AUX+idx] = presure_aux;
+                nodesG2vars[G2nodesNumber*PRESSURE_SMO+idx] = presure_smo;
                 nodesG2vars[G2nodesNumber*DRIVER      +idx] = pdriver;
                 nodesG2vars[G2nodesNumber*DRIVER_AUX  +idx] = pdriver_aux;
                 
@@ -1259,9 +1263,9 @@ void GridManager::smooth(int varName){
 
                 for (int dim=0;dim<varDim;dim++) {
                     
-                    if(abs(varValues[varDim*idxG4+dim]) < EPS8){
-                        continue;
-                    }
+//                    if(abs(varValues[varDim*idxG4+dim]) < EPS8){
+//                        continue;
+//                    }
                     
                     double smoothedVal = k2*varValues[varDim*idxG4+dim];
                     
@@ -1482,7 +1486,7 @@ void GridManager::smoothDensAndIonVel(){
     }
     
     
-    delete densVel;
+    delete [] densVel;
     auto end_time = high_resolution_clock::now();
     string msg ="[GridManager] smooth N V duration = "
                 +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
@@ -1500,7 +1504,7 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     result.reserve(xRes*yRes*zRes);
     int i,j,k;
     
-    set<int> stopList = {ELECTRIC_AUX, CURRENT_AUX, DRIVER, DRIVER_AUX, PRESSURE_AUX};
+    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO};
     int numOfSpecies = loader->getNumberOfSpecies();
     for(i=0;i<numOfSpecies;i++){
         stopList.insert(DENS_AUX(i));

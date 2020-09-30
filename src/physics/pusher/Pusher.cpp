@@ -86,7 +86,7 @@ void Pusher::addParticles(vector<shared_ptr<Particle>> particles2add){
         vector<Particle*> particlesTemp;
         particlesTemp.reserve(totalNum);
         
-        for(int i=0; i<currentPartclNumOnDomain; i++){
+        for(int i = 0; i < currentPartclNumOnDomain; i++){
             particlesTemp.push_back(particles[i]);
         }
         
@@ -261,8 +261,11 @@ void Pusher::push(int phase, int i_time){
     
     double* prtclPos;
     double* prtclVel;
+    double cflvel[3];
     
-    
+    for(int coord=0; coord < 3; coord++){
+        cflvel[coord] = loader->spatialSteps[coord]/ts;
+    }
     //need to save previous value
     if(phase == PREDICTOR){
         for( int idx=0; idx < currentPartclNumOnDomain; idx++){
@@ -353,7 +356,7 @@ void Pusher::push(int phase, int i_time){
             alpha = lx4B;
             betta = ly4B;
             gamma = lz4B;
-            
+            //TODO problem for 2D and 1D add switch(loader->dim)
             alpha = alphasB[neigh_num];
             betta = bettasB[neigh_num];
             gamma = gammasB[neigh_num];
@@ -407,35 +410,25 @@ void Pusher::push(int phase, int i_time){
         
         for( coord=0; coord < 3; coord++){
             new_velocity[coord] = curV[coord]+(G*UBprod[coord]+E[coord])*F;
-            new_position[coord] = prtclPos[coord+posShift] + new_velocity[coord]*ts;
-            
-#ifdef LOG
-            
-            if(std::isnan(new_position[coord])){
-                writeParticle2Log(phase, idx, i4E, j4E, k4E, prtclPos, prtclVel, new_position, new_velocity, E, B);
-                continue;
-            }
-
-            if(new_position[coord] < -loader->boxSizes[coord]
-               || new_position[coord] > 2*loader->boxSizes[coord]){
-                
-                writeParticle2Log(phase, idx, i4E, j4E, k4E, prtclPos, prtclVel, new_position, new_velocity, E, B);
-                continue;
-            }
-#endif
-            
-            particles[idx]->setPosition(posShift+coord, new_position[coord]);
-            particles[idx]->setVelocity(velShift+coord, new_velocity[coord]);
         }
         
+//    # change velocities in all directions always
+        for( coord=0; coord < 3; coord++){
+            particles[idx]->setVelocity(velShift+coord, new_velocity[coord]);
+        }
+//    # change coordinates only in corresponding directions (1D - X, 2D - X/Y, 3D X/Y/Z)
+        for( coord=0; coord < loader->dim; coord++){
+            new_position[coord] = prtclPos[coord+posShift] + new_velocity[coord]*ts;
+            particles[idx]->setPosition(posShift+coord, new_position[coord]);
+        }
+
         int domainNum = boundaryMgr->isPtclOutOfDomain(new_position);
         if( domainNum != IN){
             prtclPos = particles[idx]->getPosition();
-            checkParticle(idx, particles[idx], " check out BC");
             double _pos[3] = {prtclPos[posShift+0],prtclPos[posShift+1],prtclPos[posShift+2]};
             boundaryMgr->storeParticle(idx, _pos);
         }
-            
+        
     }
     
     
@@ -452,9 +445,6 @@ void Pusher::push(int phase, int i_time){
     int tot2add = particles2add.size();
     int tot2remove = leavingParticles.size();
     int prevNumOfPartcl = currentPartclNumOnDomain;
-    
-
-    
     
     
     for ( int i = 0; i < tot2add; i++ ) {
@@ -499,9 +489,27 @@ void Pusher::push(int phase, int i_time){
                                     +" particles...").c_str(), DEBUG);
     
 #ifdef LOG
+    vector<int> brokenParticles;
     for( int idx=0; idx < currentPartclNumOnDomain; idx++){
-        checkParticle(idx, particles[idx], "before end");
+        if( checkParticle(idx, particles[idx], "before end") == 1){
+            brokenParticles.push_back(idx);
+        }
     }
+    int brokenParticlesNum = brokenParticles.size();
+    for( int idx=0; idx < brokenParticlesNum; idx++){
+            
+        int prtclIdx = brokenParticles[brokenParticlesNum-1-idx];
+        int idxToUse = currentPartclNumOnDomain-1;// last particle
+        if (prtclIdx == idxToUse){
+            currentPartclNumOnDomain--;
+        }else{
+            particles[prtclIdx]->reinitializeUsingParticle(particles[idxToUse]);
+            currentPartclNumOnDomain--;
+        }
+    }
+    int TOT_BROKEN_IN_BOX = 0;
+    MPI_Allreduce(&brokenParticlesNum, &TOT_BROKEN_IN_BOX, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    logger->writeMsg(("[Pusher] broken particles in the box = "+to_string(TOT_BROKEN_IN_BOX)).c_str(),  DEBUG);
 #endif
     
     int TOT_IN_BOX = 0;
@@ -520,23 +528,43 @@ void Pusher::push(int phase, int i_time){
 
 //#################################### EXTRA LOG ##################################
 
-void Pusher::checkParticle(int idx, Particle* prtcl, string suffix){
+int Pusher::checkParticle(int idx, Particle* prtcl, string suffix){
+    
+    double ts = loader->getTimeStep();
+    
+    double* prtclPos = prtcl->getPosition();
+    double* prtclVel = prtcl->getVelocity();
+    
     for(int comp=0; comp<3; comp++){
-        double* prtclPos = prtcl->getPosition();
+        
+        double CFL_VEL = loader->spatialSteps[comp]/ts;
         
         int r0 = int((prtclPos[comp] - loader->boxCoordinates[comp][0])/loader->spatialSteps[comp]+0.5);
         int r1 = int((prtclPos[comp+3] - loader->boxCoordinates[comp][0])/loader->spatialSteps[comp]+0.5);
         
         if( (r0 < 0) || (r1 < 0) ||
            (r0 >= (loader->resolution[comp]+2))
-           || (r1 >= (loader->resolution[comp]+2))){
+           || (r1 >= (loader->resolution[comp]+2))
+           || abs(prtclVel[comp]) > CFL_VEL
+           || abs(prtclVel[comp+3]) > CFL_VEL){
             
             logger->writeMsg(("[Pusher] "+suffix+" prtclPos[0]  = "+to_string(prtclPos[0])
                               +"\n     prtclPos[1]  = "+to_string(prtclPos[1])
                               +"\n     prtclPos[2]  = "+to_string(prtclPos[2])
                               +"\n     prtclPos[3]  = "+to_string(prtclPos[3])
                               +"\n     prtclPos[4]  = "+to_string(prtclPos[4])
-                              +"\n     prtclPos[5]  = "+to_string(prtclPos[4])
+                              +"\n     prtclPos[5]  = "+to_string(prtclPos[5])
+                              +"\n     prtclVel[0]  = "+to_string(prtclVel[0])
+                              +"\n     prtclVel[1]  = "+to_string(prtclVel[1])
+                              +"\n     prtclVel[2]  = "+to_string(prtclVel[2])
+                              +"\n     prtclVel[3]  = "+to_string(prtclVel[3])
+                              +"\n     prtclVel[4]  = "+to_string(prtclVel[4])
+                              +"\n     prtclVel[5]  = "+to_string(prtclVel[5])
+                              +"\n     r0  = "+to_string(r0)
+                              +"\n     r1  = "+to_string(r1)
+                              +"\n     cflvel[0]  = "+to_string(loader->spatialSteps[0]/ts)
+                              +"\n     cflvel[1]  = "+to_string(loader->spatialSteps[1]/ts)
+                              +"\n     cflvel[2]  = "+to_string(loader->spatialSteps[2]/ts)
                               +"\n     loader->boxCoordinates[0]  = "+to_string(loader->boxCoordinates[0][0])
                               +"\n     loader->boxCoordinates[1]  = "+to_string(loader->boxCoordinates[1][0])
                               +"\n     loader->boxCoordinates[2]  = "+to_string(loader->boxCoordinates[2][0])
@@ -545,75 +573,10 @@ void Pusher::checkParticle(int idx, Particle* prtcl, string suffix){
                               +"\n     loader->boxSizes[2]  = "+to_string(loader->boxSizes[2])
                               +"\n     idx = "+to_string(idx)
                               ).c_str(), CRITICAL);
-            break;
+            return 1;
         }
     }
+    return 0;
 
 }
 
-void Pusher::checkParticle(int idx, shared_ptr<Particle> prtcl, string suffix){
-    for(int comp=0; comp<3; comp++){
-        double* prtclPos = prtcl->getPosition();
-        
-        int r0 = int((prtclPos[comp] - loader->boxCoordinates[comp][0])/loader->spatialSteps[comp]+0.5);
-        int r1 = int((prtclPos[comp+3] - loader->boxCoordinates[comp][0])/loader->spatialSteps[comp]+0.5);
-        
-        if( (r0 < 0) || (r1 < 0) ||
-           (r0 >= (loader->resolution[comp]+2))
-           || (r1 >= (loader->resolution[comp]+2))){
-            
-            logger->writeMsg(("[Pusher] "+suffix+" prtclPos[0]  = "+to_string(prtclPos[0])
-                              +"\n     prtclPos[1]  = "+to_string(prtclPos[1])
-                              +"\n     prtclPos[2]  = "+to_string(prtclPos[2])
-                              +"\n     prtclPos[3]  = "+to_string(prtclPos[3])
-                              +"\n     prtclPos[4]  = "+to_string(prtclPos[4])
-                              +"\n     prtclPos[5]  = "+to_string(prtclPos[4])
-                              +"\n     loader->boxCoordinates[0]  = "+to_string(loader->boxCoordinates[0][0])
-                              +"\n     loader->boxCoordinates[1]  = "+to_string(loader->boxCoordinates[1][0])
-                              +"\n     loader->boxCoordinates[2]  = "+to_string(loader->boxCoordinates[2][0])
-                              +"\n     loader->boxSizes[0]  = "+to_string(loader->boxSizes[0])
-                              +"\n     loader->boxSizes[1]  = "+to_string(loader->boxSizes[1])
-                              +"\n     loader->boxSizes[2]  = "+to_string(loader->boxSizes[2])
-                              +"\n     idx = "+to_string(idx)
-                              ).c_str(), CRITICAL);
-            break;
-        }
-    }
-    
-}
-
-void  Pusher::writeParticle2Log(int phase, int idx, int i4E, int j4E, int k4E, double* prtclPos,
-                                double* prtclVel, double* new_position, double* new_velocity, double* E, double* B){
-    
-    logger->writeMsg(("[Pusher] idx =  "+to_string(idx)
-                      +"\n     i  = "+to_string(i4E)
-                      +"\n     j  = "+to_string(j4E)
-                      +"\n     k  = "+to_string(k4E)
-                      +"\n     phase  = "+(phase == PREDICTOR ? "predictor" : "corrector")
-                      +"\n     predictor x = "+to_string(prtclPos[0])
-                      +"\n     predictor y = "+to_string(prtclPos[1])
-                      +"\n     predictor z = "+to_string(prtclPos[2])
-                      +"\n     corrector x = "+to_string(prtclPos[3])
-                      +"\n     corrector y = "+to_string(prtclPos[4])
-                      +"\n     corrector z = "+to_string(prtclPos[5])
-                      +"\n     predictor Vx = "+to_string(prtclVel[0])
-                      +"\n     predictor Vy = "+to_string(prtclVel[1])
-                      +"\n     predictor Vz = " +to_string(prtclVel[2])
-                      +"\n     corrector Vx = "+to_string(prtclVel[3])
-                      +"\n     corrector Vy = "+to_string(prtclVel[4])
-                      +"\n     corrector Vz = "+to_string(prtclVel[5])
-                      +"\n     x_new = "+to_string(new_position[0])
-                      +"\n     y_new = "+to_string(new_position[1])
-                      +"\n     z_new = "+to_string(new_position[2])
-                      +"\n     Vx_new = "+to_string(new_velocity[0])
-                      +"\n     Vy_new = "+to_string(new_velocity[1])
-                      +"\n     Vz_new = "+to_string(new_velocity[2])
-                      +"\n     Ex  = "+to_string(E[0])
-                      +"\n     Ey  = "+to_string(E[1])
-                      +"\n     Ez  = "+to_string(E[2])
-                      +"\n     Bx  = "+to_string(B[0])
-                      +"\n     By  = "+to_string(B[1])
-                      +"\n     Bz  = "+to_string(B[2])
-                      ).c_str(), CRITICAL);
-    
-}

@@ -70,13 +70,10 @@ public:
     
     //laser staff
     int numOfSpots=0;
-    double* centersOfSpots;
-    double* spotsRadius;
-    
-    int    prtclType2Heat;
+    int prtclType2Load;
     double prtclTemp2Load;
-    double prtclDens2Keep;
-    double prtclTemp2Keep;
+    double pressureIncreaseRate;
+    int laserPulseDuration_tsnum;
     
     //MPI staff
     std::vector<int> neighbors2Send;//27
@@ -87,6 +84,10 @@ public:
     ~Loader();
     void load();
     double getElectronPressure(double,double,double);
+    
+    double getTargetIonDensityProfile(double,double,double);
+    double getElectronPressureProfile(double,double,double);
+    
     std::vector<double> getVelocity(double,double,double,int);
     std::vector<double> getBfield(double,double,double);
     double getDensity(double,double,double,int);

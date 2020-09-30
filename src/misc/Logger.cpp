@@ -14,7 +14,7 @@ Logger::~Logger(){
 void Logger::writeMsg(const char* input, int level){
     int rank ;
     
-    set<int> allowedRanks = {0, 1};
+    set<int> allowedRanks = {0};
     
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
