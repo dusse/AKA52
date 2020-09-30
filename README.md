@@ -24,7 +24,7 @@ _______________________
     PYTHON27_INC= path to python2.7 include  
     PYTHON27_LIB= path to python2.7 lib  
 
-2. for running default example (harris 2D, GEM challenge) from src/input/Initializer.py  
+2. for running default example from src/input/Initializer.py  
     mpirun -n 2 aka.exe
 
 3. normally need to set input file path containing Initializer.py  
