@@ -57,11 +57,9 @@ int Solver::solve(int i_time)
 void Solver::performCalculation(int PHASE, int i_time){
     logger->writeMsg("[Solver] performCaclculation...", DEBUG);
     
-
-    
     pusher->push(PHASE, i_time);
     
-    if(loader->numOfSpots>0){
+    if ( loader->numOfSpots > 0 ) {
         laserMng->addIons();
     }
     
@@ -72,8 +70,8 @@ void Solver::performCalculation(int PHASE, int i_time){
     
     closureMng->calculatePressure(PHASE, i_time);
     
-    if(loader->numOfSpots>0){
-        laserMng->accelerate();
+    if ( loader->numOfSpots > 0 ) {
+        laserMng->accelerate(i_time);
     }
     
     emMng->calculateEnext(PHASE);
@@ -88,7 +86,6 @@ void Solver::performCalculation(int PHASE, int i_time){
 
 Solver::~Solver(){
     finilize();
-    logger->writeMsg("[Solver] delete...OK", DEBUG);
 }
 
 void Solver::finilize(){

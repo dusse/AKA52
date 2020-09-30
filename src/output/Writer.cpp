@@ -162,7 +162,7 @@ void Writer::writeAttributeInt(hid_t fileID, hid_t group, hid_t dxpl_id,
     H5Dclose(dset);
     H5Sclose(memspace);
     H5Sclose(filespace);
-    delete data;
+    delete[] data;
 
 }
 
@@ -193,7 +193,7 @@ void Writer::writeAttributeDbl(hid_t fileID, hid_t group, hid_t dxpl_id,
     H5Dclose(dset);
     H5Sclose(memspace);
     H5Sclose(filespace);
-    delete data;
+    delete[] data;
     
 }
 
@@ -258,8 +258,8 @@ void Writer::writeAllForRestart(){
         }
     }
     
-    delete gridSizesPerCore;
-    delete particlesPerCore;
+    delete[] gridSizesPerCore;
+    delete[] particlesPerCore;
     
     hid_t access = H5Pcreate(H5P_FILE_ACCESS);
     H5Pset_fapl_mpio(access, MPI_COMM_WORLD, info);
@@ -290,7 +290,7 @@ void Writer::writeAllForRestart(){
             
             writeParallelWithOffset(fileID, group, dxpl_id, varName, field,
                                     totalNodeNumG2, g2glob, g2offset);
-            delete field;
+            delete[] field;
         }
     }
 
@@ -309,7 +309,7 @@ void Writer::writeAllForRestart(){
             string varName = "g1_"+to_string(varN)+"_"+to_string(dir);
             writeParallelWithOffset(fileID, group, dxpl_id, varName, field,
                                     totalNodeNumG1, g1glob, g1offset);
-            delete field;
+            delete[] field;
         }
     }
 
@@ -341,7 +341,7 @@ void Writer::writeAllForRestart(){
     
     H5Fflush(fileID, H5F_SCOPE_GLOBAL);
     
-    delete particles2save;
+    delete[] particles2save;
     
     H5Gclose(group);
     H5Pclose(dxpl_id);

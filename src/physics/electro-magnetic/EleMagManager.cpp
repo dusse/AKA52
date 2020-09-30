@@ -5,7 +5,9 @@ using namespace chrono;
 
 
 EleMagManager::EleMagManager(std::shared_ptr<Loader> ldr,
-                             std::shared_ptr<GridManager> gridMnr):loader(move(ldr)), gridMgr(move(gridMnr)){
+                             std::shared_ptr<GridManager> gridMnr):
+                             loader(move(ldr)), gridMgr(move(gridMnr)){
+                                    
     logger.reset(new Logger());
     initialize();
     logger->writeMsg("[EleMagManager] create...OK", DEBUG);
@@ -198,7 +200,13 @@ void EleMagManager::calculateCurrent(int magField2use, int current2save){
             }
         }
     }
+    
+    logger->writeMsg("[EleMagManager] calculateCurrent, before  sendBoundary2Neighbor", DEBUG);
+    
     gridMgr->sendBoundary2Neighbor(current2save);
+    
+    logger->writeMsg("[EleMagManager] calculateCurrent, before  applyBC", DEBUG);
+    
     
     gridMgr->applyBC(current2save);
 
@@ -323,6 +331,19 @@ void EleMagManager::calculateEnext(int phase){
     
     VectorVar** bField   = gridMgr->getVectorVariableOnG1(magField2use);
     VectorVar** presEle  = gridMgr->getVectorVariableOnG2(PRESSURE);
+    
+    for(int ijkG2 = 0; ijkG2 < totG2; ijkG2++){
+        for ( int h = 0; h < 6; h++) {
+            gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, h,
+                                                presEle[ijkG2]->getValue()[h]);
+        }
+    }
+    
+    gridMgr->smooth(PRESSURE_SMO);
+    gridMgr->applyBC(PRESSURE_SMO);
+    
+    presEle = gridMgr->getVectorVariableOnG2(PRESSURE_SMO);
+    
     VectorVar** current  = gridMgr->getVectorVariableOnG2(CURRENT_AUX);
     VectorVar** density  = gridMgr->getVectorVariableOnG2(DENSELEC);
     VectorVar** velocity = gridMgr->getVectorVariableOnG2(VELOCION);
@@ -418,24 +439,26 @@ void EleMagManager::calculateEnext(int phase){
                 dens = density[idxG2]->getValue()[0];
                 const double* velI = velocity[idxG2]->getValue();
                 const double* J    = current[idxG2]->getValue();
+                
+                double revertdens = dens < EPS8 ? 0.0: edgeProfile(dens)/dens;
         
                 locE[0] = - (velI[1]*locB[2] - velI[2]*locB[1])
-                          + (   J[1]*locB[2] -    J[2]*locB[1])/dens
-                          - divP[0]/dens
+                          + (   J[1]*locB[2] -    J[2]*locB[1])*revertdens
+                          - divP[0]*revertdens
                           - hypVis*lapJ[0];
                 
                 locE[1] = - (velI[2]*locB[0] - velI[0]*locB[2])
-                          + (   J[2]*locB[0] -    J[0]*locB[2])/dens
-                          - divP[1]/dens
+                          + (   J[2]*locB[0] -    J[0]*locB[2])*revertdens
+                          - divP[1]*revertdens
                           - hypVis*lapJ[1];
                 
                 locE[2] = - (velI[0]*locB[1] - velI[1]*locB[0])
-                          + (   J[0]*locB[1] -    J[1]*locB[0])/dens
-                          - divP[2]/dens
+                          + (   J[0]*locB[1] -    J[1]*locB[0])*revertdens
+                          - divP[2]*revertdens
                           - hypVis*lapJ[2];
 
 #ifdef LOG
-                for(int coord=0; coord < 3; coord++){
+                for ( int coord=0; coord < 3; coord++ ) {
                     if( std::isnan(locE[coord])){
                         write2Log(idxG2, i, j, k, velI, locB, divP, lapJ, J, dens);
                     }

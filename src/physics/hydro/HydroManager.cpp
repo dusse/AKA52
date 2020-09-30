@@ -140,47 +140,80 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
             +"\n        idx = "+to_string(idx)+" type = "+to_string(type)
             +"\n        posShift = "+to_string(posShift)+" G2shift = "+to_string(G2shift);
             logger->writeMsg(msg1.c_str(), DEBUG);
-            throw runtime_error("problem indecies");
+            continue;
         }
 #endif
         
-        for (int neigh_num=0; neigh_num < 8; neigh_num++){
-            
-            idx_x = i + neighbourhood[neigh_num][0];
-            idx_y = j + neighbourhood[neigh_num][1];
-            idx_z = k + neighbourhood[neigh_num][2];
-            
-            idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
-            
-            alpha = alphas[neigh_num];
-            betta = bettas[neigh_num];
-            gamma = gammas[neigh_num];
-            
-            
             switch (loader->dim) {
                 case 1:
-                    weight = alpha;
+                        for (int neigh_num=0; neigh_num < 2; neigh_num++){
+                        
+                            idx_x = i + neighbourhood[neigh_num][0];
+                            
+                            idxG2 = IDX(idx_x ,j ,k, xSizeG2, ySizeG2, zSizeG2);
+                        
+                            alpha = alphas[neigh_num];
+
+                            weight = alpha;
+                        
+                            weights[numOfSpecies*idxG2+type] += weight;
+                        
+                            for( coord=0; coord < 3; coord++){
+                                velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
+                                += weight*vel[coord+velShift];
+                            }
+                        }
                     break;
                 case 2:
-                    weight = alpha*betta;
-                    break;
+                        for (int neigh_num=0; neigh_num < 4; neigh_num++){
+                        
+                            idx_x = i + neighbourhood[neigh_num][0];
+                            idx_y = j + neighbourhood[neigh_num][1];
+                            
+                            idxG2 = IDX(idx_x ,idx_y ,k, xSizeG2, ySizeG2, zSizeG2);
+                        
+                            alpha = alphas[neigh_num];
+                            betta = bettas[neigh_num];
+                        
+                            weight = alpha*betta;
+                        
+                            weights[numOfSpecies*idxG2+type] += weight;
+                        
+                            for( coord=0; coord < 3; coord++){
+                                velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
+                                += weight*vel[coord+velShift];
+                            }
+                        }
+                        break;
                 case 3:
-                    weight = alpha*betta*gamma;
+                            for (int neigh_num=0; neigh_num < 8; neigh_num++){
+                                
+                                idx_x = i + neighbourhood[neigh_num][0];
+                                idx_y = j + neighbourhood[neigh_num][1];
+                                idx_z = k + neighbourhood[neigh_num][2];
+                                
+                                idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
+                                
+                                alpha = alphas[neigh_num];
+                                betta = bettas[neigh_num];
+                                gamma = gammas[neigh_num];
+                                
+                                weight = alpha*betta*gamma;
+                                
+                                weights[numOfSpecies*idxG2+type] += weight;
+                                
+                                for( coord=0; coord < 3; coord++){
+                                    velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
+                                    += weight*vel[coord+velShift];
+                                }
+                            }
                     break;
                     
                 default:
                     throw runtime_error("dimension is not 1/2/3");
             }
             
-            weights[numOfSpecies*idxG2+type] += weight;
-            
-            for( coord=0; coord < 3; coord++){
-                velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
-                += weight*vel[coord+velShift];
-            }
-            
-        }
-        
+ 
     }
     
     for( spn=0; spn < numOfSpecies; spn++){
@@ -199,8 +232,8 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
         gridMgr->applyBC(gridMgr->DENS_VEL(spn));
     }
    
-    delete weights;
-    delete velocityWeighted;
+    delete [] weights;
+    delete [] velocityWeighted;
 }
 
 
@@ -243,7 +276,7 @@ void HydroManager::gatherMoments(int phase){
     
             normPtcl =  dens_vel[spn][idx]->getValue()[0];
             
-            if(normPtcl == 0.0){
+            if(normPtcl < EPS8){
                 for( coord=0; coord < 3; coord++){
                     vel = 0.0;
                     gridMgr->setVectorVariableForNodeG2(idx, gridMgr->DENS_VEL(spn), 1+coord, vel);
@@ -305,9 +338,11 @@ void HydroManager::gatherMoments(int phase){
     for( idx=0; idx < G2nodesNumber; idx++){
         for(spn = 0; spn<numOfSpecies;spn++){
             prtclCharge = pusher->getParticleCharge4Type(spn);
+            double densEleRevert = densEle[idx] < EPS8 ? 0.0 : 1.0/densEle[idx];
+            double ionDens = densOfIons[numOfSpecies*idx+spn];
             for( coord=0; coord < 3; coord++){
                 vel = dens_vel[spn][idx]->getValue()[1+coord];
-                fluidVel[3*idx+coord] += densOfIons[numOfSpecies*idx+spn]*vel*prtclCharge/densEle[idx];
+                fluidVel[3*idx+coord] += ionDens*vel*prtclCharge*densEleRevert;
             }
         }
         for( coord=0; coord < 3; coord++){
@@ -320,9 +355,9 @@ void HydroManager::gatherMoments(int phase){
     gridMgr->applyBC(VELOCION);
 
     
-    delete densOfIons;
-    delete densEle;
-    delete fluidVel;
+    delete [] densOfIons;
+    delete [] densEle;
+    delete [] fluidVel;
     
     auto end_time = high_resolution_clock::now();
     string msg ="[HydroManager] gatherMoments()... duration = "
@@ -330,3 +365,4 @@ void HydroManager::gatherMoments(int phase){
     logger->writeMsg(msg.c_str(), DEBUG);
     
 }
+

@@ -39,15 +39,17 @@ const string  GET_HYPERVISCOSITY = "getHyperviscosity";
 const string  GET_ELECTRON_MASS  = "getElectronMass";
 const string  GET_RELAX_FACTOR  = "getRelaxFactor";
 
-
 const string  NUMBER_OF_LASER_SPOTS = "getNumberOfLaserSpots";
-const string  GET_CENTERS  = "getLaserSpotCenter";
-const string  GET_RADIUS   = "getLaserSpotRadius";
 
-const string  PARTICLE_TYPE2HEAT = "getParticleType2Heat";
+const string  PARTICLE_TYPE2LOAD = "getParticleType2Load";
 const string  PARTICLE_TEMP2LOAD = "getParticleTemp2Load";
-const string  PARTICLE_DENS2KEEP = "getParticleDensity2sustain";
-const string  PARTICLE_TEMP2KEEP = "getParticleTemperature2sustain";
+const string  PRESSURE_INCREASE_RATE = "getPressureIncreaseRate";
+
+const string  GET_LASER_PULSE_DURATION = "getLaserPulseDuration";
+
+
+const string  GET_TARGET_ION_DENSITY2SUSTAIN = "getTargetIonDensity2sustain";
+const string  GET_ELECTRON_PRESSURE2SUSTAIN  = "getElectronPressure2sustain";
 
 const string  dirs[] = {"X", "Y", "Z"};
 
@@ -120,14 +122,25 @@ void Loader::load()
                                                              strdup(GET_INPUT_FILE.c_str()),
                                                              strdup(BRACKETS.c_str())));;
     
-        MPI_Cart_create(MPI_COMM_WORLD, 3, mpiDomains, BCtype, 1, &com);
-        MPI_Cart_coords(com, rank, 3, cs);
+    int nprocs;
+    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     
-    string importantmsg = "[Loader] [MPI] mpiDomain[0] = "+to_string(mpiDomains[0])
-    +" mpiDomain[1] = "+to_string(mpiDomains[1])
-    +" mpiDomain[2] = "+to_string(mpiDomains[2]);
+    string importantmsg = "[Loader] [MPI] mpiDomain[0] (X) = "+to_string(mpiDomains[0])
+    +" mpiDomain[1] (Y) = "+to_string(mpiDomains[1])
+    +" mpiDomain[2] (Z) = "+to_string(mpiDomains[2]);
     
     logger.writeMsg(importantmsg.c_str(), INFO);
+    
+    if( mpiDomains[0]*mpiDomains[1]*mpiDomains[2] != nprocs ){
+        string errmsg = "[Loader] [MPI] number of cores run with mpirun command  = "+to_string(nprocs);
+        logger.writeMsg(errmsg.c_str(), CRITICAL);
+        throw runtime_error("!!!number of requested cores must be equal to number of distributed cores!!!");
+    }
+    
+    MPI_Cart_create(MPI_COMM_WORLD, 3, mpiDomains, BCtype, 1, &com);
+    MPI_Cart_coords(com, rank, 3, cs);
+    
+
     
         for(int i = 0; i < 3; i++){
             this->mpiCoords[i] = cs[i];
@@ -248,8 +261,8 @@ void Loader::load()
             string msgs = "[Loader] [MPI] rank = "+to_string(rank)
             +"\n"+string( 10, ' ' )+" resolution = "+to_string(resolution[n])
             +"\n"+string( 10, ' ' )+" offsetInPixels = "+to_string(offsetInPixels[n])
-            +"\n"+string( 10, ' ' )+" boxCoordinates[n][0] = "+to_string(boxCoordinates[n][0])
-            +"\n"+string( 10, ' ' )+" boxCoordinates[n][1] = "+to_string(boxCoordinates[n][1]);
+            +"\n"+string( 10, ' ' )+" boxCoordinates["+to_string(n)+"][0] = "+to_string(boxCoordinates[n][0])
+            +"\n"+string( 10, ' ' )+" boxCoordinates["+to_string(n)+"][1] = "+to_string(boxCoordinates[n][1]);
             logger.writeMsg(msgs.c_str(), INFO);
         
     }
@@ -321,8 +334,8 @@ void Loader::load()
     
     if(numOfSpots>0){
         
-        this->prtclType2Heat = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                   strdup(PARTICLE_TYPE2HEAT.c_str()),
+        this->prtclType2Load = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
+                                                                   strdup(PARTICLE_TYPE2LOAD.c_str()),
                                                                    strdup(BRACKETS.c_str())))-1;
         // -1 because in input count starts in human manner from 1
         
@@ -330,34 +343,12 @@ void Loader::load()
                                                                     strdup(PARTICLE_TEMP2LOAD.c_str()),
                                                                     strdup(BRACKETS.c_str())));
         
-        
-        this->prtclDens2Keep = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                   strdup(PARTICLE_DENS2KEEP.c_str()),
-                                                                   strdup(BRACKETS.c_str())));
-        
-        this->prtclTemp2Keep = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                   strdup(PARTICLE_TEMP2KEEP.c_str()),
-                                                                   strdup(BRACKETS.c_str())));
-        
-        
-        centersOfSpots = new double[numOfSpots*3*sizeof(double)];
-        spotsRadius    = new double[numOfSpots*sizeof(double)];
-        
-        for (int n=0; n<numOfSpots; n++){
-            
-            for(int dim=0; dim<3; dim++){
-                string varName =GET_CENTERS+dirs[dim]+"position"+to_string(n+1);
-                centersOfSpots[3*n+dim] = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                               strdup(varName.c_str()),
-                                                                               strdup(BRACKETS.c_str())));
-            }
-            
-            string varName =GET_RADIUS+to_string(n+1);
-            spotsRadius[n] = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                  strdup(varName.c_str()),
-                                                                  strdup(BRACKETS.c_str())));
-        }
-    }
+        this->pressureIncreaseRate = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
+                                                                    strdup(PRESSURE_INCREASE_RATE.c_str()),
+                                                                    strdup(BRACKETS.c_str())));
+        this->laserPulseDuration_tsnum = (int) PyFloat_AsDouble(PyObject_CallMethod(pInstance,
+                                                                                    strdup(GET_LASER_PULSE_DURATION.c_str()),
+                                                                                    strdup(BRACKETS.c_str())));    }
 
     
     if(rank == 0){
@@ -400,22 +391,15 @@ void Loader::load()
         
         if(numOfSpots>0){
             msg = "[Loader] [LASER] numOfSpots = "+to_string(numOfSpots)
-                    +"; prtclType2Heat = "+to_string(prtclType2Heat+1)
-                    +"; prtclDens2Keep = "+to_string(prtclDens2Keep)
-                    +"; prtclTemp2Keep = "+to_string(prtclTemp2Keep);
+                    +"; prtclType2Load = "+to_string(prtclType2Load+1)
+                    +"; pressureIncreaseRate = "+to_string(pressureIncreaseRate);
+            logger.writeMsg(msg.c_str(), INFO);
+            msg = "[Loader] [LASER] laserPulseDuration_tsnum = "+to_string(laserPulseDuration_tsnum)
+            +"; laserPulseDuration_omega = "+to_string(laserPulseDuration_tsnum*timeStep);
             logger.writeMsg(msg.c_str(), INFO);
         
-            for (int n=0; n<numOfSpots; n++){
-                char buf[100];
-                snprintf(buf, sizeof(buf),"[Loader] [LASER] spot [%s] [%s, %s, %s] R = %f",
-                       to_string(n).c_str(),
-                       to_string(centersOfSpots[3*n+0]).c_str(),
-                       to_string(centersOfSpots[3*n+1]).c_str(),
-                       to_string(centersOfSpots[3*n+2]).c_str(),
-                       spotsRadius[n]);
-                logger.writeMsg(buf, INFO);
-            }
         }
+        
         msg = "[Loader] [OHM's LAW]: hyperviscosity = "+to_string(hyperviscosity);
         logger.writeMsg(msg.c_str(), INFO);
         
@@ -522,6 +506,26 @@ double Loader::getElectronPressure(double x,double y,double z){
 }
 
 
+double Loader::getTargetIonDensityProfile(double x,double y,double z){
+    string varName = GET_TARGET_ION_DENSITY2SUSTAIN;
+    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
+                                                strdup(varName.c_str()),
+                                                strdup(BRACKETS_3DOUBLE.c_str()),
+                                                x,y,z));
+}
+
+
+
+double Loader::getElectronPressureProfile(double x,double y,double z){
+    string varName = GET_ELECTRON_PRESSURE2SUSTAIN;
+    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
+                                                strdup(varName.c_str()),
+                                                strdup(BRACKETS_3DOUBLE.c_str()),
+                                                x,y,z));
+}
+
+
+
 double Loader::getParticlesPerCellNumber(){
     return ppc;
 }
@@ -530,26 +534,38 @@ PyObject * Loader::getPythonClassInstance(string className){
     PyObject  *pName, *pModule, *pDict, *pClass, *pInstance;
     string msg = "[Loader] Start to instantiate the Python class " + className;
     logger.writeMsg(msg.c_str(), DEBUG);
+
     pName = PyString_FromString(className.c_str());
+    
     pModule = PyImport_Import(pName);
+    if(pModule == NULL){
+            logger.writeMsg("*****************************************************", CRITICAL);
+            logger.writeMsg("****                                             ****", CRITICAL);
+            logger.writeMsg("****  STOP SIMULATION!!!    INPUT FILE PROBLEM   ****", CRITICAL);
+            logger.writeMsg("****                                             ****", CRITICAL);
+            logger.writeMsg("****   try debug mode 'make -DLOG'               ****", CRITICAL);
+            logger.writeMsg("****   check python enviroment and imports       ****", CRITICAL);
+            logger.writeMsg("*****************************************************", CRITICAL);
+            exit(-1);
+    }
+    
     pDict = PyModule_GetDict(pModule);
     pClass = PyDict_GetItemString(pDict, className.c_str());
-    if (PyCallable_Check(pClass))
-    {
+    
+    if (PyCallable_Check(pClass)){
         pInstance = PyObject_CallObject(pClass, NULL);
-    }
-    else
-    {
+    }else{
         logger.writeMsg("[Loader] Cannot instantiate the Python class", CRITICAL);
         pInstance = nullptr;
     }
+    
     logger.writeMsg("[Loader] finish to instantiate the Python class ", DEBUG);
     
     return pInstance;
 }
 
-Loader::~Loader()
-{
+Loader::~Loader(){
+    
     Py_Finalize();
     logger.writeMsg("[Loader] FINALIZE...OK!", DEBUG);
 }

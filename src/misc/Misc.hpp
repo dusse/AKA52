@@ -29,5 +29,7 @@ bool areSame(double, double);
 
 void crossProd(double[3], double[3], double[3]);
 
+double edgeProfile(double dens);
+
 
 #endif /* Misc_hpp */
