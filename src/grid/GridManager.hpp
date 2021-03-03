@@ -7,6 +7,7 @@
 #include <cmath>
 #include <memory>
 #include <chrono>
+#include <algorithm>
 #include <mpi.h>
 #include "../misc/Logger.hpp"
 #include "../misc/Misc.hpp"
@@ -37,6 +38,13 @@ enum G2VAR{
     SIZEG2
 };
 
+//# for boundary conditions
+#define NEIGHBOR_LEFT   4
+#define NEIGHBOR_RIGHT  22
+#define NEIGHBOR_BOTTOM 10
+#define NEIGHBOR_TOP    16
+#define NEIGHBOR_BACK   12
+#define NEIGHBOR_FRONT  14
 
 class GridManager{
     
@@ -105,6 +113,9 @@ private:
     
     void initBoundaryIndecies();
     
+    void fillG4Boundary4outflowBC(double* , int );
+    
+    
 public:
     
     GridManager(std::shared_ptr<Loader>);
@@ -149,6 +160,7 @@ public:
     void sendBoundary2Neighbor(int);
     void gatherBoundaryUsingNeighbor(int);
     void applyBC(int);
+    void applyBC4G1(int);
     
     void smoothDensAndIonVel();
     void smooth(int);

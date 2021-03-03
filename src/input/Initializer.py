@@ -1,5 +1,5 @@
 class Initializer:
-
+    
     
     def __init__(self):
         #   0: run from scratch
@@ -10,63 +10,75 @@ class Initializer:
         # BOX
         self.dim=3
         
-        self.boxSize    = [20.0, 20.0, 20.0] # in d0 - ion inertia length
-        self.boxSizePxl = [20 ,  20 , 20]
-
-        self.bcType = [1,1,1] #1 - periodic 0 - ideal
+        self.boxSize    = [25.0, 25.0, 25.0] # in d0 - ion inertia length
+        self.boxSizePxl = [25,  25 , 25]
         
-        self.partclBcType = [1,1,1] #2 - reflect 1 - periodic 0 - outflow
+        self.bcType = [0,1,0] #1 - periodic 0 - damping layer
         
-        self.mpiCores  = [1,2,1]
+        self.partclBcType = [0,1,0] #1 - periodic 0 - outflow
+        
+        self.mpiCores  = [1,1,2]
+        
+        self.dampingBoundaryWidth = [[10,10], [0,0], [4,10]]
         
         # time
         self.ts = 0.01
-        self.maxtsnum = 1000
+        self.maxtsnum =1501
         self.outputStride = 100
         
         # output. need to create it before
         self.outputDir = "output/"
-        self.fileTemplate = "test_output_"
-    
+        self.fileTemplate = "test_laser3D_"
+        
         # Particles
-        self.ppc = 20
+        self.ppc = 5
         self.ppcMinDens = 0.2
-
+        
         self.numOfSpecies = 2
         self.masses  = [1, 1]
         self.charges = [1, 1]
-        self.dens = [self.ppcMinDens, 2.0]
-        self.vel1 = 0.00001
+        self.dens = [self.ppcMinDens, 1.0]
+        self.vel1 = 0.01
         self.vel2 = 0.00001
-       
-        self.Pele0 = 0.0000001
-        self.surface_pos = 10.0
+        
+        self.Pele0 = 0.001
+        self.surface_pos = 11.0
         
         # Laser spots
-        self.spotsNum = 0
+        self.spotsNum = 1
+        self.spotPos = [[0.5*self.boxSize[0], 0.5*self.boxSize[1], self.surface_pos-4]]
+        
+        
+        self.radius1 = 5.0
+        self.radius2 = 5.0
+        self.radius3 = 2.0
         
         self.type2Load = 2
         self.temp2load = 0.0001
         
         self.rate2heat = 1.0
         
-        self.dens2sustain = self.dens[1]
-        self.temp2sustain = 1.0
-    
+        self.dens2sustain = 1.0
+        self.temp2sustain = 10.0
+        
         #magnetic field magnitude
         self.Bfield = [0.0, 0.0, 0.0]
         
         #ohm's law
-        self.hyperviscosity = 0.001
-
+        self.hyperviscosity = 0.1
+        self.resistivity = 0.0
+        
         # pressure tensor
         self.emass = 0.1
         self.tau   = 0.01 # ~ time
         self.relaxFactor = 1/self.tau
         self.smoothStride = 1.5*self.maxtsnum
-
+        
         #misc
         self.ZERO = 0.0
+        self.PI = 3.14159265358979323846
+    
+    
     
     
     #   0: run from scratch
@@ -120,6 +132,27 @@ class Initializer:
     def getFieldBCTypeZ(self):
         return self.bcType[2]
     
+    
+    def getDampingBoundaryWidthXleft(self):
+        return self.dampingBoundaryWidth[0][0]
+    
+    def getDampingBoundaryWidthXright(self):
+        return self.dampingBoundaryWidth[0][1]
+    
+    def getDampingBoundaryWidthYleft(self):
+        return self.dampingBoundaryWidth[1][0]
+    
+    def getDampingBoundaryWidthYright(self):
+        return self.dampingBoundaryWidth[1][1]
+    
+    def getDampingBoundaryWidthZleft(self):
+        return self.dampingBoundaryWidth[2][0]
+    
+    def getDampingBoundaryWidthZright(self):
+        return self.dampingBoundaryWidth[2][1]
+    
+    
+    
     def getParticleBCTypeX(self):
         return self.partclBcType[0]
     
@@ -146,13 +179,13 @@ class Initializer:
     
     def getOutputTimestep(self):
         return self.outputStride
-
+    
     def getElectronPressure(self, x, y, z):
         return self.Pele0
     
-
+    
     #   physics: particles
-#   first set number of used species
+    #   first set number of used species
     def getNumOfSpecies(self):
         return self.numOfSpecies
     
@@ -162,7 +195,7 @@ class Initializer:
     def getMinimumDens2ResolvePPC(self):
         return self.ppcMinDens
     
-    #           species 1
+    #   species 1
     def getMass4species1(self):
         return self.masses[0]
     
@@ -176,7 +209,7 @@ class Initializer:
             return self.ZERO
 
 
-#           species 1: modulus of velocity for Maxwell distribution
+    #   species 1: modulus of velocity for Maxwell distribution
     def getVelocityX4species1(self, x, y, z):
         return self.vel1
     
@@ -186,14 +219,14 @@ class Initializer:
     def getVelocityZ4species1(self, x, y, z):
         return self.vel1
     
-    #           species 2
+    #   species 2
     def getMass4species2(self):
         return self.masses[1]
     
     def getCharge4species2(self):
         return self.charges[1]
     
-
+    
     
     def getDensity4species2(self, x, y, z):
         if (z < self.surface_pos):
@@ -201,7 +234,7 @@ class Initializer:
         else:
             return self.ZERO
 
-#           species 2: modulus of velocity for Maxwell distribution
+    #   species 2: modulus of velocity for Maxwell distribution
     def getVelocityX4species2(self, x, y, z):
         return self.vel2
     
@@ -226,21 +259,50 @@ class Initializer:
     
     # set density profile to sustain by ablation operator
     def getTargetIonDensity2sustain(self, x, y, z):
+        if (z < self.surface_pos):
+            return self.dens2sustain
+        else:
+            return self.ZERO
+
+
+
+    # smooth polynom by roch smets 2014 PoP
+    def polynomByRochSmets(self, x): # x = |x|
+        return -6.0*x**5+15.0*x**4-10.0*x**3+1.0
+    
+    
+    # set electron pressure profile to sustain by ablation operator
+    def getElectronPressure2sustain(self, x, y, z):
+        
+        if(z > self.surface_pos):
+            return self.ZERO
+        
+        for i in range(self.spotsNum):
+            
+            tx = x - self.spotPos[i][0]
+            ty = y - self.spotPos[i][1]
+            tz = z - self.spotPos[i][2]
+            
+            A = self.radius1
+            B = self.radius2
+            C = self.radius3
+            rad = pow(pow(tx/A, 2)+pow(ty/B, 2)+pow(tz/C, 2), 0.5)
+            polVal = self.polynomByRochSmets(rad)
+            
+            if (rad < 1.0):
+                return polVal*self.dens2sustain*self.temp2sustain
+        
         return self.ZERO
 
-    
-     # set electron pressure profile to sustain by ablation operator
-    def getElectronPressure2sustain(self, x, y, z):
-        return self.ZERO
 
 
     def getParticleTemp2Load(self):
         return self.temp2load
-
+    
     def getPressureIncreaseRate(self):
         return self.rate2heat
-
-
+    
+    
     
     #   physics: magnetic field
     def getBfieldX(self, x, y, z):
@@ -256,26 +318,20 @@ class Initializer:
     def getHyperviscosity(self):
         return self.hyperviscosity
     
+    #   physics: ohm's law resistivity
+    def getResistivity(self):
+        return self.resistivity
     
     #   physics: pressure evolution
     def getElectronMass(self):
         return self.emass
-
+    
     #   physics: pressure evolution : isotropization
     def getRelaxFactor(self):
         return self.relaxFactor
-
+    
     #   physics: pressure evolution : smoothing
     def getElectronPressureSmoothingStride(self):
         return self.smoothStride
-
-
-
-
-
-
-
-
-
 
 

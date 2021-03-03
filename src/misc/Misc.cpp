@@ -40,3 +40,19 @@ double edgeProfile(double dens){
 #endif
     
 }
+
+double polynomByRoch(double val){
+    
+    if (val < -1.0) { val = -1.0; }
+    else if (val > 0.0) { val = 0.0; }
+    
+    double modX = fabs(val);
+    
+    double res = -6.0*modX*modX*modX*modX*modX
+    +15.0*modX*modX*modX*modX
+    -10.0*modX*modX*modX
+    +1;
+    
+    return res;
+}
+

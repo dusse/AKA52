@@ -22,6 +22,9 @@ private:
     std::shared_ptr<Loader> loader;
     std::shared_ptr<GridManager> gridMgr;
     
+    double* BfieldDampingCoeff;
+    void initBfieldDampingCoeff();
+    
     void initialize();
     void calculateMagneticField(int, int, int);
     void calculateCurrent(int, int);
@@ -31,6 +34,7 @@ private:
     
 public:
     EleMagManager(std::shared_ptr<Loader>, std::shared_ptr<GridManager>);
+    ~EleMagManager();
     void calculateBhalf(int);
     void calculateBnext();
     void calculateJhalf(int);

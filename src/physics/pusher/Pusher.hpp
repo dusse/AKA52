@@ -10,7 +10,6 @@
 #include <string>
 #include <memory>
 
-
 #include "../../grid/GridManager.hpp"
 #include "../../grid/boundary/BoundaryManager.hpp"
 
@@ -35,12 +34,18 @@ private:
     int totinBoxInit = 0;
     int totalNum;
     
+    double INITIAL_B_FIELD = 0.0;
+    
     int currentPartclNumOnDomain = 0;
     Particle** particles;
     
     void initialize();
     
     int checkParticle(int, Particle*, std::string);
+    
+    void performSorting();
+    
+    void reallocateParticles();
     
 public:
     Pusher(std::shared_ptr<Loader>,
@@ -66,6 +71,8 @@ public:
     void setParticleVelocity(int, double[6]);
     void setParticleVelocity(int, int, double);
     void setParticleType(int, int);
+    
+    void checkEnergyBalance(int);
     
     Particle** getParticles();
     

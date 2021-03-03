@@ -14,6 +14,8 @@
 #include "../../input/Loader.hpp"
 #include "../../particles/Particle.hpp"
 
+#include "../GridManager.hpp"
+
 #include "../../common/variables/VectorVar.hpp"
 
 
@@ -39,6 +41,7 @@ private:
     int applyPeriodicBC(Particle*, int);
     int  applyReflectBC(Particle*, int);
     int  applyOutflowBC(Particle*, int);
+    int  applyOutflowBC(int);
     
 public:
     

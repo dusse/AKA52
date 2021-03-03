@@ -10,7 +10,7 @@
 #define  IDX_2d(i, j, k, n0, n1, n2) ((j)+(n1)*(i)+(0)*(k)+(0)*(n2)+(n0)*(0))
 
 
-#define BIGN 1.0E10
+#define BIGN 1.0E5
 #define EPS8 1.0E-8
 #define EPS4 1.0E-4
 #define EPSILON           (1.0E-18)
@@ -30,6 +30,8 @@ bool areSame(double, double);
 void crossProd(double[3], double[3], double[3]);
 
 double edgeProfile(double dens);
+
+double polynomByRoch(double val);
 
 
 #endif /* Misc_hpp */

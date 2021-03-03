@@ -145,12 +145,6 @@ int GridManager::getVarsNumOnG1(){
  *                                  dx/2     |      dx/2
  */
 
-#define NEIGHBOR_LEFT   4
-#define NEIGHBOR_RIGHT  22
-#define NEIGHBOR_BOTTOM 10
-#define NEIGHBOR_TOP    16
-#define NEIGHBOR_BACK   12
-#define NEIGHBOR_FRONT  14
 
 void GridManager::initBoundaryIndecies(){
     int xRes = loader->resolution[0];
@@ -159,7 +153,7 @@ void GridManager::initBoundaryIndecies(){
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     int i,j,k, idx2set, idx2use;
 
-    if(loader->BCtype[0] == IDEAL && xRes != 1){
+    if(loader->BCtype[0] == DAMPING && xRes != 1){
         
         if (loader->neighbors2Send[NEIGHBOR_LEFT] == MPI_PROC_NULL){
             for ( j=0; j<yResG2; j++){
@@ -184,7 +178,7 @@ void GridManager::initBoundaryIndecies(){
         }
     }
     
-    if(loader->BCtype[1] == IDEAL && yRes != 1){
+    if(loader->BCtype[1] == DAMPING && yRes != 1){
         
         if (loader->neighbors2Send[NEIGHBOR_BOTTOM] == MPI_PROC_NULL){
             for ( i=0; i<xResG2; i++){
@@ -208,7 +202,7 @@ void GridManager::initBoundaryIndecies(){
         }
     }
     
-    if(loader->BCtype[2] == IDEAL && zRes != 1){
+    if(loader->BCtype[2] == DAMPING && zRes != 1){
         
         if (loader->neighbors2Send[NEIGHBOR_BACK] == MPI_PROC_NULL){
             for ( i=0; i<xResG2; i++){
@@ -262,16 +256,17 @@ void GridManager::initG1Nodes(){
                           {0,1,1}, {1,1,0}, {1,0,1}, {1,1,1}};
     int i,j,k,idx;
     int idx_count = 0;
-    for ( i=0; i<xResG1; i++){
-        for ( j=0; j<yResG1; j++){
-            for ( k=0; k<zResG1; k++){
+    for( i = 0; i < xResG1; i++ ){
+        for( j = 0; j < yResG1; j++ ){
+            for( k = 0; k < zResG1; k++ ){
+                
                 idx   = IDX(i,j,k,xResG1,yResG1,zResG1);
                 
-                for(int comp = 0; comp < 8; comp++){
+                for( int comp = 0; comp < 8; comp++ ){
                     neibors4G2spatialDerX[8*idx+comp] = 0;
                     neibors4G2spatialDerY[8*idx+comp] = 0;
                     neibors4G2spatialDerZ[8*idx+comp] = 0;
-                    neighbourhood[8*idx+comp] = 0;
+                    neighbourhood[8*idx+comp] = idx;
                 }
 
                 
@@ -279,7 +274,7 @@ void GridManager::initG1Nodes(){
                 vector<int> neiborsY = {0, 0, 0, 0, 0, 0, 0, 0};
                 vector<int> neiborsZ = {0, 0, 0, 0, 0, 0, 0, 0};
                     
-                for(int pairNum = 0; pairNum<4; pairNum++){
+                for( int pairNum = 0; pairNum < 4; pairNum++ ){
                         if(xRes != 1){
                             neiborsX[2*pairNum+0] = IDX(i+dx[pairNum][0][0],
                                                         j+dx[pairNum][0][1],
@@ -317,20 +312,20 @@ void GridManager::initG1Nodes(){
                         
                 }
                     
-                for(int comp = 0; comp < 8; comp++){
+                for( int comp = 0; comp < 8; comp++ ){
                     neibors4G2spatialDerX[8*idx+comp] = neiborsX[comp];
                     neibors4G2spatialDerY[8*idx+comp] = neiborsY[comp];
                     neibors4G2spatialDerZ[8*idx+comp] = neiborsZ[comp];
                 }
                     
-                if(i != 0 && j != 0 && k != 0){
+                if( i != 0 && j != 0 && k != 0 ){
                     for(int comp = 0; comp < 8; comp++){
                         neiborsX[comp] = 0;
                         neiborsY[comp] = 0;
                         neiborsZ[comp] = 0;
                     }
                     
-                    for(int pairNum = 0; pairNum<4; pairNum++){
+                    for( int pairNum = 0; pairNum < 4; pairNum++ ){
                             if(xRes != 1){
                                 neiborsX[2*pairNum+0] = IDX(i-dx[pairNum][0][0],
                                                             j-dx[pairNum][0][1],
@@ -366,7 +361,7 @@ void GridManager::initG1Nodes(){
                             }
                     }
                         
-                    for(int comp = 0; comp < 8; comp++){
+                    for( int comp = 0; comp < 8; comp++ ){
                         neibors4G1spatialDerX[8*idx+comp] = neiborsX[comp];
                         neibors4G1spatialDerY[8*idx+comp] = neiborsY[comp];
                         neibors4G1spatialDerZ[8*idx+comp] = neiborsZ[comp];
@@ -378,7 +373,8 @@ void GridManager::initG1Nodes(){
                     int b = yRes == 1 ? 0 : 1;
                     int c = zRes == 1 ? 0 : 1;
                     
-                    for(int neiNum = 0; neiNum<8; neiNum++){
+                    
+                    for( int neiNum = 0; neiNum < 8; neiNum++ ){
                         neighbourhood[8*idx+neiNum] = IDX(i-a*neibIDXs[neiNum][0],
                                                           j-b*neibIDXs[neiNum][1],
                                                           k-c*neibIDXs[neiNum][2],
@@ -641,6 +637,7 @@ void GridManager::initG2Nodes(){
             }
         }
     }
+    
     auto end_time = high_resolution_clock::now();
     string msg ="[GridManager] init Node G2 duration = "
                 +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
@@ -655,6 +652,10 @@ int GridManager::DENS_VEL(int sp){
     return SHIFT_MAIN_DENS+sp;
 }
 
+void GridManager::applyBC4G1(int varName){
+    
+
+}
 
 void GridManager::applyBC(int varName){
     //nothing for periodic BC, maps are empty
@@ -663,117 +664,36 @@ void GridManager::applyBC(int varName){
     int varDim = nodesG2vars[G2nodesNumber*varName]->getSize();
     int varShift = G2nodesNumber*varName;
     int dim;
+    const double * vectorVar;
     
-    const double* vectorVar;
-    
-    map<int, int>  allBoundaryCells;
-    allBoundaryCells.insert(idxs4BoundaryX2fill.begin(), idxs4BoundaryX2fill.end());
-    allBoundaryCells.insert(idxs4BoundaryY2fill.begin(), idxs4BoundaryY2fill.end());
-    allBoundaryCells.insert(idxs4BoundaryZ2fill.begin(), idxs4BoundaryZ2fill.end());
-    
-    set<int> specialTreat;
-    int numOfSpecies = loader->getNumberOfSpecies();
-    for(int i=0;i<numOfSpecies;i++){
-        specialTreat.insert(DENS_VEL(i));
-    }
-    
-    if ( specialTreat.count(varName) ){
-        for ( const auto &keyval : allBoundaryCells ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            for ( dim=0; dim<varDim; dim++) {
-                double oldVal2use = vectorVar[dim];
-                double oldVal2set = nodesG2vars[varShift+keyval.second]->getValue()[dim];
-                nodesG2vars[varShift+keyval.second]->addValue( dim, oldVal2use);
-                nodesG2vars[varShift+keyval.first]->addValue( dim, oldVal2set);
-            }
-        }
-        auto end_time = high_resolution_clock::now();
-        string msg ="[GridManager] apply BC for var = "+to_string(varName) +"  duration = "
-        +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
-        logger->writeMsg(msg.c_str(), DEBUG);
-        
-        return;
-    }
-
-
-    set<int> simpleRevertVariables = {CURRENT, CURRENT_AUX, VELOCION};
-    
-    if ( simpleRevertVariables.count(varName) ){
-        
-        for ( const auto &keyval : idxs4BoundaryX2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0, -vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1,  vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2,  vectorVar[2]);
-        }
-        
-        for ( const auto &keyval : idxs4BoundaryY2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0,  vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1, -vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2,  vectorVar[2]);
-        }
-        
-        for ( const auto &keyval : idxs4BoundaryZ2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0,  vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1,  vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2, -vectorVar[2]);
-        }
-        
-        auto end_time = high_resolution_clock::now();
-        string msg ="[GridManager] apply BC for var = "+to_string(varName) +"  duration = "
-        +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
-        logger->writeMsg(msg.c_str(), DEBUG);
-        
-        return;
-    }
-    
-    set<int> idealRevertVariables = {ELECTRIC, ELECTRIC_AUX};
-    
-    if ( idealRevertVariables.count(varName) ){
-        for ( const auto &keyval : idxs4BoundaryX2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0,  vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1, -vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2, -vectorVar[2]);
-        }
-        for ( const auto &keyval : idxs4BoundaryY2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0, -vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1,  vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2, -vectorVar[2]);
-        }
-        for ( const auto &keyval : idxs4BoundaryZ2fill ) {
-            vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-            nodesG2vars[varShift+keyval.second]->setValue( 0, -vectorVar[0]);
-            nodesG2vars[varShift+keyval.second]->setValue( 1, -vectorVar[1]);
-            nodesG2vars[varShift+keyval.second]->setValue( 2,  vectorVar[2]);
-        }
-        
-        auto end_time = high_resolution_clock::now();
-        string msg ="[GridManager] apply BC for var = "+to_string(varName) +"  duration = "
-        +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
-        logger->writeMsg(msg.c_str(), DEBUG);
-        
-        return;
-    }
-    
-    // by default set the same value
-    for ( const auto &keyval : allBoundaryCells ) {
+    for ( const auto &keyval : idxs4BoundaryX2fill ) {
         vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
-        for ( dim = 0; dim < varDim; dim++) {
+        for ( dim = 0; dim < varDim; dim++ ){
             nodesG2vars[varShift+keyval.second]->setValue( dim, vectorVar[dim]);
         }
     }
     
+    for ( const auto &keyval : idxs4BoundaryY2fill ) {
+        vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
+        for ( dim = 0; dim < varDim; dim++ ){
+            nodesG2vars[varShift+keyval.second]->setValue( dim, vectorVar[dim]);
+        }
+    }
+    
+    for ( const auto &keyval : idxs4BoundaryZ2fill ) {
+        vectorVar = nodesG2vars[varShift+keyval.first]->getValue();
+        for ( dim = 0; dim < varDim; dim++ ){
+            nodesG2vars[varShift+keyval.second]->setValue( dim, vectorVar[dim]);
+        }
+    }
     
     auto end_time = high_resolution_clock::now();
-    string msg ="[GridManager] apply BC for var = "+to_string(varName) +"  duration = "
+    string msg ="[GridManager] apply the same value BC for var = "+to_string(varName) +"  duration = "
     +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
     logger->writeMsg(msg.c_str(), DEBUG);
     
 }
+
 
 
 void GridManager::sendRecvIndecis4MPI(){
@@ -848,30 +768,30 @@ void GridManager::sendBoundary2Neighbor(int varName){
     double *recvBuf[27];
     const double* vectorVar;
     
-    for (t = 0; t < 27; t++) {
+    for( t = 0; t < 27; t++ ){
         sendBuf[t] = new double[counter[t]*varDim*sizeof(double)];
         recvBuf[t] = new double[counter[t]*varDim*sizeof(double)];
-        for(i = 0; i < counter[t]; i++){
+        for( i = 0; i < counter[t]; i++ ){
             vectorVar = nodesG2vars[varShift+sendIdx[t][i]]->getValue();
-            for (int dim=0;dim<varDim;dim++) {
+            for( int dim = 0; dim < varDim; dim++ ){
                 sendBuf[t][varDim*i+dim] = vectorVar[dim];
             }
         }
     }
     
     MPI_Status st;
-    for (t = 0; t < 27; t++) {
-        if (t != 13){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 ){
             MPI_Sendrecv(sendBuf[t], counter[t]*varDim, MPI_DOUBLE, loader->neighbors2Send[t], t,
                          recvBuf[t], counter[t]*varDim, MPI_DOUBLE, loader->neighbors2Recv[t], t,
                          MPI_COMM_WORLD, &st);
         }
     }
     
-    for (t = 0; t < 27; t++) {
-        if (t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL) {
-            for(i = 0; i < counter[t]; i++){
-                for (int dim=0;dim<varDim;dim++) {
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL ){
+            for( i = 0; i < counter[t]; i++ ){
+                for( int dim = 0; dim < varDim; dim++ ){
                     nodesG2vars[varShift+recvIdx[t][i]]
                     ->setValue( dim, recvBuf[t][varDim*i+dim]);
                 }
@@ -880,7 +800,7 @@ void GridManager::sendBoundary2Neighbor(int varName){
     }
     
     
-    for (t = 0; t < 27; t++) {
+    for( t = 0; t < 27; t++ ){
         delete [] sendBuf[t];
         delete [] recvBuf[t];
     }
@@ -902,11 +822,11 @@ void GridManager::sendRecvIndecis4MPIext(){
     int idx, i, j, k, a, b, c, t;
     vector<int> idxX, idxY, idxZ;
     
-    for (a = -1; a <= 1; a++) {
-        for (b = -1; b <= 1; b++) {
-            for (c = -1; c <= 1; c++) {
-                t = (1 + c) + 3 * ((1 + b) + 3 * (1 + a));
+    for( a = -1; a <= 1; a++ ){
+        for( b = -1; b <= 1; b++ ){
+            for( c = -1; c <= 1; c++ ){
                 
+                t = (1 + c) + 3 * ((1 + b) + 3 * (1 + a));
 
                 switch (a) {
                     case -1: idxX = {0   , 1       , xRes, xRes + 1}; break;
@@ -927,14 +847,15 @@ void GridManager::sendRecvIndecis4MPIext(){
                 counter4Gath[t] = (idxX[1] - idxX[0] + 1)*
                                   (idxY[1] - idxY[0] + 1)*
                                   (idxZ[1] - idxZ[0] + 1);
+                
                 sendIdx4Gath[t] = new int[counter4Gath[t]];
                 recvIdx4Gath[t] = new int[counter4Gath[t]];
                 
                 int lineIDX = 0;
-                for (i = idxX[0]; i <= idxX[1]; i++) {
-                    for (j = idxY[0]; j <= idxY[1]; j++) {
-                        for (k = idxZ[0]; k <= idxZ[1]; k++) {
-                            idx = IDX(i,j,k, xResG2, yResG2, zResG2);
+                for( i = idxX[0]; i <= idxX[1]; i++ ){
+                    for( j = idxY[0]; j <= idxY[1]; j++ ){
+                        for( k = idxZ[0]; k <= idxZ[1]; k++ ){
+                            idx = IDX(i, j, k, xResG2, yResG2, zResG2);
                             sendIdx4Gath[t][lineIDX] = idx;
                             lineIDX++;
                         }
@@ -942,10 +863,10 @@ void GridManager::sendRecvIndecis4MPIext(){
                 }
                 
                 lineIDX = 0;
-                for (i = idxX[2]; i <= idxX[3]; i++) {
-                    for (j = idxY[2]; j <= idxY[3]; j++) {
-                        for (k = idxZ[2]; k <= idxZ[3]; k++) {
-                            idx = IDX(i,j,k, xResG2, yResG2, zResG2);
+                for( i = idxX[2]; i <= idxX[3]; i++ ){
+                    for( j = idxY[2]; j <= idxY[3]; j++ ){
+                        for( k = idxZ[2]; k <= idxZ[3]; k++ ){
+                            idx = IDX(i, j, k, xResG2, yResG2, zResG2);
                             recvIdx4Gath[t][lineIDX] = idx;
                             lineIDX++;
                         }
@@ -977,15 +898,14 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
     
     const double* varVec;
     
-    
     int idx;
-    for (t = 0; t < 27; t++) {
+    for( t = 0; t < 27; t++ ){
         sendBuf[t] = new double[counter4Gath[t]*varDim*sizeof(double)];
         recvBuf[t] = new double[counter4Gath[t]*varDim*sizeof(double)];
-        for(i = 0; i<counter4Gath[t]; i++){
+        for( i = 0; i < counter4Gath[t]; i++ ){
             idx = sendIdx4Gath[t][i];
             varVec = nodesG2vars[varShift+idx]->getValue();
-            for (int dim=0;dim<varDim;dim++) {
+            for( int dim = 0; dim < varDim; dim++ ){
                 sendBuf[t][varDim*i+dim] = varVec[dim];
             }
         }
@@ -993,29 +913,30 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
     
     auto end_time1 = high_resolution_clock::now();
     string msg1 ="[GridManager] gatherBoundaryUsingNeighbor: pack for "+to_string(varName)
-                +" duration = "+to_string(duration_cast<milliseconds>(end_time1 - start_time).count())+" ms";
+                +" duration = "+to_string(duration_cast<milliseconds>(end_time1 - start_time).count())
+                +" ms";
     logger->writeMsg(msg1.c_str(), DEBUG);
     
     
-    for (t = 0; t < 27; t++) {
-        if (t != 13){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 ){
             MPI_Sendrecv(sendBuf[t], counter4Gath[t]*varDim,  MPI_DOUBLE, loader->neighbors2Send[t], t,
                          recvBuf[t], counter4Gath[t]*varDim,  MPI_DOUBLE, loader->neighbors2Recv[t], t,
                          MPI_COMM_WORLD, &st);
-            
         }
     }
     
     auto end_time2 = high_resolution_clock::now();
     string msg2 ="[GridManager] gatherBoundaryUsingNeighbor: send data for "+to_string(varName)
-                +" duration = "+to_string(duration_cast<milliseconds>(end_time2 - end_time1).count())+" ms";
+                +" duration = "+to_string(duration_cast<milliseconds>(end_time2 - end_time1).count())
+                +" ms";
     logger->writeMsg(msg2.c_str(), DEBUG);
     
-    for (t = 0; t < 27; t++) {
-        if (t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL) {
-            for(i = 0; i< counter4Gath[t]; i++){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL ){
+            for( i = 0; i < counter4Gath[t]; i++ ){
                 idx = recvIdx4Gath[t][i];
-                for (int dim=0;dim<varDim;dim++) {
+                for( int dim = 0; dim < varDim; dim++ ){
                     nodesG2vars[varShift+idx]->addValue( dim, recvBuf[t][varDim*i+dim]);
                 }
             }
@@ -1024,22 +945,24 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
     
     auto end_time3 = high_resolution_clock::now();
     string msg4 ="[GridManager] gatherBoundaryUsingNeighbor: unpack for "+to_string(varName)
-                +" duration = "+to_string(duration_cast<milliseconds>(end_time3 - end_time2).count())+" ms";
+                +" duration = "+to_string(duration_cast<milliseconds>(end_time3 - end_time2).count())
+                +" ms";
     logger->writeMsg(msg4.c_str(), DEBUG);
     
     
-    for (t = 0; t < 27; t++) {
+    for( t = 0; t < 27; t++ ){
         delete [] sendBuf[t];
         delete [] recvBuf[t];
     }
     
+    int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     
-    if (xRes == 1){
-        for (j = 0; j < yRes+2; j++){
-            for (k = 0; k < zRes+2; k++){
-                ijk0 = IDX(0, j, k, xRes+2, yRes+2, zRes+2);
-                ijk  = IDX(1, j, k, xRes+2, yRes+2, zRes+2);
-                ijk1 = IDX(2, j, k, xRes+2, yRes+2, zRes+2);
+    if( xRes == 1 ){
+        for( j = 0; j < yResG2; j++ ){
+            for( k = 0; k < zResG2; k++ ){
+                ijk0 = IDX(0, j, k, xResG2, yResG2, zResG2);
+                ijk  = IDX(1, j, k, xResG2, yResG2, zResG2);
+                ijk1 = IDX(2, j, k, xResG2, yResG2, zResG2);
                 
                 nodesG2vars[varShift+ijk0]
                 ->setValue(nodesG2vars[varShift+ijk]->getValue());
@@ -1050,12 +973,12 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
         }
     }
     
-    if (yRes == 1){
-        for (i = 0; i < xRes+2; i++){
-            for (k = 0; k < zRes+2; k++){
-                ijk0 = IDX(i, 0, k, xRes+2, yRes+2, zRes+2);
-                ijk  = IDX(i, 1, k, xRes+2, yRes+2, zRes+2);
-                ijk1 = IDX(i, 2, k, xRes+2, yRes+2, zRes+2);
+    if( yRes == 1 ){
+        for( i = 0; i < xResG2; i++ ){
+            for( k = 0; k < zResG2; k++ ){
+                ijk0 = IDX(i, 0, k, xResG2, yResG2, zResG2);
+                ijk  = IDX(i, 1, k, xResG2, yResG2, zResG2);
+                ijk1 = IDX(i, 2, k, xResG2, yResG2, zResG2);
                 
                 nodesG2vars[varShift+ijk0]
                 ->setValue(nodesG2vars[varShift+ijk]->getValue());
@@ -1067,12 +990,12 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
     }
     
     
-    if (zRes == 1){
-        for (i = 0; i < xRes+2; i++){
-            for (j = 0; j < yRes+2; j++){
-                ijk0 = IDX(i, j, 0, xRes+2, yRes+2, zRes+2);
-                ijk  = IDX(i, j, 1, xRes+2, yRes+2, zRes+2);
-                ijk1 = IDX(i, j, 2, xRes+2, yRes+2, zRes+2);
+    if( zRes == 1 ){
+        for( i = 0; i < xResG2; i++ ){
+            for( j = 0; j < yResG2; j++ ){
+                ijk0 = IDX(i, j, 0, xResG2, yResG2, zResG2);
+                ijk  = IDX(i, j, 1, xResG2, yResG2, zResG2);
+                ijk1 = IDX(i, j, 2, xResG2, yResG2, zResG2);
                 
                 nodesG2vars[varShift+ijk0]
                 ->setValue(nodesG2vars[varShift+ijk]->getValue());
@@ -1087,8 +1010,6 @@ void GridManager::gatherBoundaryUsingNeighbor(int varName){
     string msg ="[GridManager] gatherBoundaryUsingNeighbor: total for "+to_string(varName)
                 +" duration = "+to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
     logger->writeMsg(msg.c_str(), DEBUG);
-
-    
 }
 
 
@@ -1102,9 +1023,9 @@ void GridManager::sendRecvIndecis4MPIonG4(){
     int idx, i, j, k, a, b, c, t;
     vector<int> idxX, idxY, idxZ;
     
-    for (a = -1; a <= 1; a++) {
-        for (b = -1; b <= 1; b++) {
-            for (c = -1; c <= 1; c++) {
+    for( a = -1; a <= 1; a++ ){
+        for( b = -1; b <= 1; b++ ){
+            for( c = -1; c <= 1; c++ ){
                 
                 switch (a) {
                     case -1: idxX = {3   , 3       , xRes + 3, xRes + 3}; break;
@@ -1157,6 +1078,133 @@ void GridManager::sendRecvIndecis4MPIonG4(){
 
 
 
+void GridManager::fillG4Boundary4outflowBC(double* varValues, int varDim){
+    
+    int xRes = loader->resolution[0],
+        yRes = loader->resolution[1],
+        zRes = loader->resolution[2];
+    int xResG4 = xRes+4, yResG4 = yRes+4, zResG4 = zRes+4;
+    int idx2use1, idx2use2, idx2set;
+    double * vectorVar1;
+    double * vectorVar2;
+    double val;
+    int i, j, k, dim;
+    
+    if (loader->neighbors2Send[NEIGHBOR_LEFT] == MPI_PROC_NULL){
+        for ( j=0; j<yResG4; j++){
+            for ( k=0; k<zResG4; k++){
+                idx2use1 = IDX(1,j,k, xResG4,yResG4,zResG4);
+                idx2use2 = IDX(2,j,k, xResG4,yResG4,zResG4);
+                idx2set  = IDX(0,j,k, xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                    varValues[varDim*idx2set+dim] = val;
+                }
+            }
+        }
+    }
+    
+    if (loader->neighbors2Send[NEIGHBOR_RIGHT] == MPI_PROC_NULL){
+        for ( j=0; j<yResG4; j++){
+            for ( k=0; k<zResG4; k++){
+                
+                idx2use1 = IDX(xResG4-2,j,k, xResG4,yResG4,zResG4);
+                idx2use2 = IDX(xResG4-3,j,k, xResG4,yResG4,zResG4);
+                idx2set  = IDX(xResG4-1,j,k, xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                    varValues[varDim*idx2set+dim] = val;
+                }
+                
+            }
+        }
+    }
+    
+    if (loader->neighbors2Send[NEIGHBOR_BOTTOM] == MPI_PROC_NULL){
+        for ( i=0; i<xResG4; i++){
+            for ( k=0; k<zResG4; k++){
+                
+                idx2use1 = IDX(i,1,k, xResG4,yResG4,zResG4);
+                idx2use2 = IDX(i,2,k, xResG4,yResG4,zResG4);
+                idx2set  = IDX(i,0,k, xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                    varValues[varDim*idx2set+dim] = val;
+                }
+                
+                
+            }
+        }
+    }
+    
+    if (loader->neighbors2Send[NEIGHBOR_TOP] == MPI_PROC_NULL){
+        for ( i=0; i<xResG4; i++){
+            for ( k=0; k<zResG4; k++){
+                
+                idx2use1 = IDX(i,yResG4-2,k, xResG4,yResG4,zResG4);
+                idx2use2 = IDX(i,yResG4-3,k, xResG4,yResG4,zResG4);
+                idx2set  = IDX(i,yResG4-1,k, xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                    varValues[varDim*idx2set+dim] = val;
+                }
+                
+            }
+        }
+    }
+    
+    if (loader->neighbors2Send[NEIGHBOR_BACK] == MPI_PROC_NULL){
+        for ( i=0; i<xResG4; i++){
+            for ( j=0; j<yResG4; j++){
+                
+                idx2use1 = IDX(i,j,1,xResG4,yResG4,zResG4);
+                idx2use2 = IDX(i,j,2,xResG4,yResG4,zResG4);
+                idx2set  = IDX(i,j,0,xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                    varValues[varDim*idx2set+dim] = val;
+                }
+            }
+        }
+    }
+    
+    if (loader->neighbors2Send[NEIGHBOR_FRONT] == MPI_PROC_NULL){
+        for ( i=0; i<xResG4; i++){
+            for ( j=0; j<yResG4; j++){
+                
+                idx2use1 = IDX(i,j,zResG4-2, xResG4,yResG4,zResG4);
+                idx2use2 = IDX(i,j,zResG4-3, xResG4,yResG4,zResG4);
+                idx2set  = IDX(i,j,zResG4-1, xResG4,yResG4,zResG4);
+                vectorVar1 = &varValues[varDim*idx2use1];
+                vectorVar2 = &varValues[varDim*idx2use2];
+                
+                for ( dim = 0; dim < varDim; dim++) {
+                    val = 2.0*vectorVar1[dim] - vectorVar2[dim];
+                   varValues[varDim*idx2set+dim] = val;
+                }
+                
+            }
+        }
+    }
+    
+ }
+
+
 void GridManager::smooth(int varName){
     
     int i, j, k, idx, idxG4;
@@ -1176,44 +1224,54 @@ void GridManager::smooth(int varName){
     
     double* varValues = new double[totG4*varDim*sizeof(double)];
     
-    for ( i=0; i<xResG2; i++){
-        for ( j=0; j<yResG2; j++){
-            for ( k=0; k<zResG2; k++){
+    for ( idxG4 = 0; idxG4 < totG4; idxG4++ ){
+        for (int dim=0;dim<varDim;dim++) {
+            varValues[varDim*idxG4+dim] = 0.0;
+        }
+    }
+    
+    for( i=0; i < xResG2; i++ ){
+        for( j=0; j < yResG2; j++ ){
+            for( k=0; k < zResG2; k++ ){
                 idx   = IDX(i  ,j  ,k  ,xResG2,yResG2,zResG2);
                 idxG4 = IDX(i+1,j+1,k+1,xResG4,yResG4,zResG4);
                 vectorVar = nodesG2vars[varShift+idx]->getValue();
-                for (int dim=0;dim<varDim;dim++) {
+                for( int dim = 0; dim < varDim; dim++ ){
                     varValues[varDim*idxG4+dim] = vectorVar[dim];
                 }
             }
         }
     }
     
-    for (t = 0; t < 27; t++) {
+    fillG4Boundary4outflowBC(varValues, varDim);
+    
+    
+    for( t = 0; t < 27; t++ ){
         sendBuf[t] = new double[counterOnG4[t]*varDim*sizeof(double)];
         recvBuf[t] = new double[counterOnG4[t]*varDim*sizeof(double)];
-        for(i = 0; i < counterOnG4[t]; i++){
+        for( i = 0; i < counterOnG4[t]; i++ ){
             int si = sendIdxOnG4[t][i];
-            for (int dim=0;dim<varDim;dim++) {
+            for( int dim = 0; dim < varDim; dim++ ){
                 sendBuf[t][varDim*i+dim] = varValues[varDim*si+dim];
                 
             }
         }
     }
+
     
     MPI_Status st;
-    for (t = 0; t < 27; t++) {
-        if (t != 13){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 ){
             MPI_Sendrecv(sendBuf[t], counterOnG4[t]*varDim, MPI_DOUBLE, loader->neighbors2Send[t], t,
                          recvBuf[t], counterOnG4[t]*varDim, MPI_DOUBLE, loader->neighbors2Recv[t], t,
                          MPI_COMM_WORLD, &st);
         }
     }
-    for (t = 0; t < 27; t++) {
-        if (t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL) {
-            for(i = 0; i < counterOnG4[t]; i++){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL ){
+            for( i = 0; i < counterOnG4[t]; i++ ){
                 int ri = recvIdxOnG4[t][i];
-                for (int dim=0;dim<varDim;dim++) {
+                for( int dim = 0; dim < varDim; dim++ ){
                     varValues[varDim*ri+dim] = recvBuf[t][varDim*i+dim];
                 }
             }
@@ -1221,7 +1279,7 @@ void GridManager::smooth(int varName){
     }
     
     
-    for (t = 0; t < 27; t++) {
+    for( t = 0; t < 27; t++ ){
         delete [] sendBuf[t];
         delete [] recvBuf[t];
     }
@@ -1255,17 +1313,12 @@ void GridManager::smooth(int varName){
     int foi, soi, toi;
     int idxFo, idxSo, idxTo;
     
-    for ( i=1; i<xResG2+1; i++){
-        for ( j=1; j<yResG2+1; j++){
-            for ( k=1; k<zResG2+1; k++){
+    for( i=1; i<xResG2+1; i++ ){
+        for( j=1; j<yResG2+1; j++ ){
+            for( k=1; k<zResG2+1; k++ ){
                 idxG4 = IDX(i,j,k,xResG4,yResG4,zResG4);
-                
 
-                for (int dim=0;dim<varDim;dim++) {
-                    
-//                    if(abs(varValues[varDim*idxG4+dim]) < EPS8){
-//                        continue;
-//                    }
+                for( int dim = 0; dim < varDim; dim++){
                     
                     double smoothedVal = k2*varValues[varDim*idxG4+dim];
                     
@@ -1326,28 +1379,36 @@ void GridManager::smoothDensAndIonVel(){
     
     double* densVel = new double[totG4*varDim*sizeof(double)];
     
-    for ( i=0; i<xResG2; i++){
-        for ( j=0; j<yResG2; j++){
-            for ( k=0; k<zResG2; k++){
+    for ( idxG4 = 0; idxG4 < totG4; idxG4++ ){
+        for( int dim = 0; dim < varDim; dim++ ){
+            densVel[varDim*idxG4+dim] = 0.0;
+        }
+    }
+    
+    for( i = 0; i < xResG2; i++ ){
+        for( j = 0; j < yResG2; j++ ){
+            for( k = 0; k < zResG2; k++ ){
                 idx   = IDX(i  ,j  ,k  ,xResG2,yResG2,zResG2);
                 idxG4 = IDX(i+1,j+1,k+1,xResG4,yResG4,zResG4);
                 
                 vectorVar = nodesG2vars[G2nodesNumber*DENSELEC+idx]->getValue();
                 densVel[varDim*idxG4+0] = vectorVar[0];
                 vectorVar = nodesG2vars[G2nodesNumber*VELOCION+idx]->getValue();
-                for (int dim=1;dim<varDim;dim++) {
+                for( int dim = 1; dim < varDim; dim++ ){
                     densVel[varDim*idxG4+dim] = vectorVar[dim-1];
                 }
             }
         }
     }
     
-    for (t = 0; t < 27; t++) {
+    fillG4Boundary4outflowBC(densVel, varDim);
+    
+    for( t = 0; t < 27; t++ ){
         sendBuf[t] = new double[counterOnG4[t]*varDim*sizeof(double)];
         recvBuf[t] = new double[counterOnG4[t]*varDim*sizeof(double)];
-        for(i = 0; i < counterOnG4[t]; i++){
+        for( i = 0; i < counterOnG4[t]; i++ ){
             int si = sendIdxOnG4[t][i];
-            for (int dim=0;dim<varDim;dim++) {
+            for( int dim = 0; dim < varDim; dim++ ){
                 sendBuf[t][varDim*i+dim] = densVel[varDim*si+dim];
                 
             }
@@ -1355,18 +1416,18 @@ void GridManager::smoothDensAndIonVel(){
     }
     
     MPI_Status st;
-    for (t = 0; t < 27; t++) {
-        if (t != 13){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 ){
             MPI_Sendrecv(sendBuf[t], counterOnG4[t]*varDim, MPI_DOUBLE, loader->neighbors2Send[t], t,
                          recvBuf[t], counterOnG4[t]*varDim, MPI_DOUBLE, loader->neighbors2Recv[t], t,
                          MPI_COMM_WORLD, &st);
         }
     }
-    for (t = 0; t < 27; t++) {
-        if (t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL) {
-            for(i = 0; i < counterOnG4[t]; i++){
+    for( t = 0; t < 27; t++ ){
+        if( t != 13 && loader->neighbors2Recv[t] != MPI_PROC_NULL ){
+            for( i = 0; i < counterOnG4[t]; i++ ){
                 int ri = recvIdxOnG4[t][i];
-                for (int dim=0;dim<varDim;dim++) {
+                for( int dim = 0; dim < varDim; dim++ ){
                     densVel[varDim*ri+dim] = recvBuf[t][varDim*i+dim];
                 }
             }
@@ -1436,22 +1497,19 @@ void GridManager::smoothDensAndIonVel(){
     int foi, soi, toi;
     int idxFo, idxSo, idxTo;
     
-    for ( i=1; i<xResG2+1; i++){
-        for ( j=1; j<yResG2+1; j++){
-            for ( k=1; k<zResG2+1; k++){
-                idxG4 = IDX(i,j,k,xResG4,yResG4,zResG4);
+    for( i = 1; i < xResG2+1; i++ ){
+        for( j = 1; j < yResG2+1; j++ ){
+            for( k = 1; k < zResG2+1; k++ ){
+                
+                idxG4 = IDX(i, j, k, xResG4, yResG4, zResG4);
                 
                 double smoothedVal[4] = {0.0,0.0,0.0,0.0};
                 
-                for (int dim=0;dim<varDim;dim++) {
-                    
-                    if(abs(densVel[varDim*idxG4+dim]) < EPS8){
-                        continue;
-                    }
+                for( int dim = 0; dim < varDim; dim++ ){
                     
                     smoothedVal[dim] = k2*densVel[varDim*idxG4+dim];
                     
-                    for(foi = 0; foi<6; foi++){
+                    for( foi = 0; foi < 6; foi++ ){
                         idxFo = IDX(i+zeroOrderNeighb[foi][0],
                                     j+zeroOrderNeighb[foi][1],
                                     k+zeroOrderNeighb[foi][2],
@@ -1459,7 +1517,7 @@ void GridManager::smoothDensAndIonVel(){
                         smoothedVal[dim] += k3*densVel[varDim*idxFo+dim];
                     }
                 
-                    for(soi = 0; soi<12; soi++){
+                    for( soi = 0; soi < 12; soi++ ){
                         idxSo = IDX(i+firstOrderNeighb[soi][0],
                                     j+firstOrderNeighb[soi][1],
                                     k+firstOrderNeighb[soi][2],
@@ -1467,7 +1525,7 @@ void GridManager::smoothDensAndIonVel(){
                         smoothedVal[dim] += k4*densVel[varDim*idxSo+dim];
                     }
                
-                    for(toi = 0; toi<8; toi++){
+                    for( toi = 0; toi < 8; toi++ ){
                         idxTo = IDX(i+secndOrderNeighb[toi][0],
                                     j+secndOrderNeighb[toi][1],
                                     k+secndOrderNeighb[toi][2],
@@ -1476,15 +1534,16 @@ void GridManager::smoothDensAndIonVel(){
                     }
                     
                 }
-                idx = IDX(i-1,j-1,k-1,xResG2,yResG2,zResG2);
+                
+                idx = IDX(i-1, j-1, k-1, xResG2, yResG2, zResG2);
                 nodesG2vars[G2nodesNumber*DENSELEC+idx]->setValue(0, smoothedVal[0]);
-                for (int dim=1;dim<varDim;dim++) {
+                
+                for( int dim = 1; dim < varDim; dim++ ){
                     nodesG2vars[G2nodesNumber*VELOCION+idx]->setValue(dim-1, smoothedVal[dim]);
                 }
             }
         }
     }
-    
     
     delete [] densVel;
     auto end_time = high_resolution_clock::now();
@@ -1506,17 +1565,19 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     
     set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO};
     int numOfSpecies = loader->getNumberOfSpecies();
-    for(i=0;i<numOfSpecies;i++){
+    
+    for( i = 0; i < numOfSpecies; i++ ){
         stopList.insert(DENS_AUX(i));
     }
-    for ( i=0; i<xRes; i++){
-        for ( j=0; j<yRes; j++){
-            for ( k=0; k<zRes; k++){
+    
+    for( i = 0; i < xRes; i++ ){
+        for( j = 0; j < yRes; j++ ){
+            for( k = 0; k < zRes; k++ ){
                 idxG1 = IDX(i  ,j  ,k  ,xResG1,yResG1,zResG1);
                 idxG2 = IDX(i+1,j+1,k+1,xResG2,yResG2,zResG2);
                 vector<VectorVar> allVars;
-                for ( int varN=0; varN<totVarsOnG2; varN++){
-                    if(stopList.count(varN)){
+                for( int varN = 0; varN < totVarsOnG2; varN++ ){
+                    if( stopList.count(varN) ){
                         continue;
                     }
                     allVars.push_back(*nodesG2vars[G2nodesNumber*varN+idxG2]);
