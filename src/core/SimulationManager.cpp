@@ -85,9 +85,11 @@ void SimulationManager::initialize() {
     hydroMng.reset(new HydroManager(loader, gridMng, pusher));
     closureMng.reset(new ClosureManager(loader, gridMng));
     elemagMng.reset(new EleMagManager(loader, gridMng));
+    
     solver.reset(new Solver(loader, gridMng, pusher,
                                   hydroMng, elemagMng, closureMng,
-                                  laserMng));
+                                  laserMng));    
+    
     writer.reset(new Writer(loader, gridMng, pusher));
     
     logger->writeMsg("[SimulationManager] init...OK", DEBUG);
@@ -105,7 +107,6 @@ void SimulationManager::runSimulation(int ac, char **av) {
 
     int rank ;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
   
     for ( i_time=0; i_time < maxTimeStep; i_time++ ){
         auto start_time = high_resolution_clock::now();

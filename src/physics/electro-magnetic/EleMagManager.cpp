@@ -24,6 +24,8 @@ void EleMagManager::initialize(){
     
     //magnetic field is defined by ModelInitializer
     
+    initBfieldDampingCoeff();
+    
     calculateBhalf(PREDICTOR);
     calculateJhalf(PREDICTOR);
     
@@ -57,6 +59,118 @@ void EleMagManager::initialize(){
 
 }
 
+EleMagManager::~EleMagManager(){
+    delete[] BfieldDampingCoeff;
+}
+
+void EleMagManager::initBfieldDampingCoeff(){
+    
+    //needed for damping boundary conditions
+    int xRes = loader->resolution[0],
+        yRes = loader->resolution[1],
+        zRes = loader->resolution[2];
+    
+    int xResG1 = xRes+1, yResG1 = yRes+1, zResG1 = zRes+1;
+    
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    double Lx = loader->boxSizes[0],
+           Ly = loader->boxSizes[1],
+           Lz = loader->boxSizes[2];
+    
+    int idx2use;
+    int nG1 = xResG1*yResG1*zResG1;
+    int i, j, k;
+    
+    BfieldDampingCoeff = new double[nG1*sizeof(double)];
+    
+    for( int idx = 0; idx < nG1; idx++ ){
+        BfieldDampingCoeff[idx] = 1.0;
+    }
+    
+    double leftXWidth = loader->dampingBoundaryWidth[0][0];
+    double rigtXWidth = loader->dampingBoundaryWidth[0][1];
+    
+    double leftYWidth = loader->dampingBoundaryWidth[1][0];
+    double rigtYWidth = loader->dampingBoundaryWidth[1][1];
+    
+    double leftZWidth = loader->dampingBoundaryWidth[2][0];
+    double rigtZWidth = loader->dampingBoundaryWidth[2][1];
+    
+    double normLengthXleft, normLengthXrigt,
+           normLengthYleft, normLengthYrigt,
+           normLengthZleft, normLengthZrigt;
+    
+    double x, y, z;
+    
+    for( i = 0; i < xResG1; i++ ){
+        for( j = 0; j < yResG1; j++ ){
+            for( k = 0; k < zResG1; k++ ){
+            
+                x = i*dx + domainShiftX;
+                y = j*dy + domainShiftY;
+                z = k*dz + domainShiftZ;
+                
+                idx2use = IDX(i,j,k, xResG1,yResG1,zResG1);
+                
+                if( leftXWidth > 0.0 ){
+                    normLengthXleft = x/leftXWidth;
+                    if( abs(normLengthXleft) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthXleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtXWidth > 0.0 ){
+                    normLengthXrigt = ( Lx - x )/rigtXWidth;
+                    if( abs(normLengthXrigt) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthXrigt;
+                        continue;
+                    }
+                }
+                
+                if( leftYWidth > 0.0 ){
+                    normLengthYleft = y/leftYWidth;
+                    if( abs(normLengthYleft) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthYleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtYWidth > 0.0 ){
+                    normLengthYrigt = ( Ly - y )/rigtYWidth;
+                    if( abs(normLengthYrigt) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthYrigt;
+                        continue;
+                    }
+                }
+                
+                if( leftZWidth > 0.0 ){
+                    normLengthZleft = z/leftZWidth;
+                    if( abs(normLengthZleft) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthZleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtZWidth > 0.0 ){
+                    normLengthZrigt = ( Lz - z )/rigtZWidth;
+                    if( abs(normLengthZrigt) < 1 ){
+                        BfieldDampingCoeff[idx2use] = normLengthZrigt;
+                        continue;
+                    }
+                }
+            }
+        }
+    }
+    
+}
 
 void EleMagManager::calculateMagneticField(int magField2use, int eleField2use, int magField2save){
     
@@ -88,11 +202,11 @@ void EleMagManager::calculateMagneticField(int magField2use, int eleField2use, i
     int left, rigt;
     double bFieldX, bFieldY, bFieldZ;
     const double* B0;
-
-    for(int idx = 0; idx<totalG1Nodes; idx++){
+    
+    for( int idx = 0; idx < totalG1Nodes; idx++ ){
         
         Exdy = 0; Exdz= 0; Eydx= 0; Eydz= 0; Ezdx= 0; Ezdy = 0;
-        for (int pairNum = 0; pairNum<4; pairNum++){
+        for( int pairNum = 0; pairNum < 4; pairNum++ ){
             left = ngborsXder[8*idx+2*pairNum+0];
             rigt = ngborsXder[8*idx+2*pairNum+1];// index ijk is saved with 1
             Eydx += eField[left]->getValue()[1] - eField[rigt]->getValue()[1];
@@ -109,16 +223,16 @@ void EleMagManager::calculateMagneticField(int magField2use, int eleField2use, i
             Eydz += eField[left]->getValue()[1] - eField[rigt]->getValue()[1];
         }
         B0 = bFieldPrev[idx]->getValue();
-        bFieldX = B0[0] + Eydz*dtz - Ezdy*dty;
-        bFieldY = B0[1] + Ezdx*dtx - Exdz*dtz;
-        bFieldZ = B0[2] + Exdy*dty - Eydx*dtx;
         
-        gridMgr->setVectorVariableForNodeG1(idx, magField2save, 0, bFieldX);
-        gridMgr->setVectorVariableForNodeG1(idx, magField2save, 1, bFieldY);
-        gridMgr->setVectorVariableForNodeG1(idx, magField2save, 2, bFieldZ);
-
+        bFieldX = B0[0] + (Eydz*dtz - Ezdy*dty)*BfieldDampingCoeff[idx];
+        bFieldY = B0[1] + (Ezdx*dtx - Exdz*dtz)*BfieldDampingCoeff[idx];
+        bFieldZ = B0[2] + (Exdy*dty - Eydx*dtx)*BfieldDampingCoeff[idx];
+        
+        vector<double> bf = {bFieldX, bFieldY, bFieldZ};
+        for( int coord = 0; coord < 3; coord++ ) {
+            gridMgr->setVectorVariableForNodeG1(idx, magField2save, coord, bf[coord]);
+        }
     }
-    
 }
 
 
@@ -201,13 +315,11 @@ void EleMagManager::calculateCurrent(int magField2use, int current2save){
         }
     }
     
-    logger->writeMsg("[EleMagManager] calculateCurrent, before  sendBoundary2Neighbor", DEBUG);
-    
     gridMgr->sendBoundary2Neighbor(current2save);
     
-    logger->writeMsg("[EleMagManager] calculateCurrent, before  applyBC", DEBUG);
+    gridMgr->applyBC(current2save);
     
-    
+    gridMgr->smooth(current2save);
     gridMgr->applyBC(current2save);
 
 }
@@ -221,8 +333,7 @@ void EleMagManager::calculateBhalf(int phase){
     int magFeld2save;
     int eleField2use = ELECTRIC;
     
-    switch (phase)
-    {
+    switch (phase){
         case PREDICTOR:
             magField2use = MAGNETIC;
             magFeld2save = MAGNETIC_AUX;
@@ -311,8 +422,7 @@ void EleMagManager::calculateEnext(int phase){
     int magField2use, eleField2save;
     string msg;
 
-    switch (phase)
-    {
+    switch (phase){
         case PREDICTOR:
             magField2use  = MAGNETIC_AUX;
             eleField2save = ELECTRIC_AUX;
@@ -329,22 +439,19 @@ void EleMagManager::calculateEnext(int phase){
             throw runtime_error("no phase");
     }
     
-    VectorVar** bField   = gridMgr->getVectorVariableOnG1(magField2use);
-    VectorVar** presEle  = gridMgr->getVectorVariableOnG2(PRESSURE);
+    double cflvel[3];
+    double ts = loader->getTimeStep();
+    double cellBreakdownEfield[3];
     
-    for(int ijkG2 = 0; ijkG2 < totG2; ijkG2++){
-        for ( int h = 0; h < 6; h++) {
-            gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, h,
-                                                presEle[ijkG2]->getValue()[h]);
-        }
+    for(int coord=0; coord < 3; coord++){
+        cflvel[coord] = loader->spatialSteps[coord]/ts;
+        cellBreakdownEfield[coord] = loader->cellBreakdownEfieldFactor*cflvel[coord]/ts;
     }
     
-    gridMgr->smooth(PRESSURE_SMO);
-    gridMgr->applyBC(PRESSURE_SMO);
+    VectorVar** bField   = gridMgr->getVectorVariableOnG1(magField2use);
+    VectorVar** presEle  = gridMgr->getVectorVariableOnG2(PRESSURE_SMO);
     
-    presEle = gridMgr->getVectorVariableOnG2(PRESSURE_SMO);
-    
-    VectorVar** current  = gridMgr->getVectorVariableOnG2(CURRENT_AUX);
+    VectorVar** current  = gridMgr->getVectorVariableOnG2(CURRENT);
     VectorVar** density  = gridMgr->getVectorVariableOnG2(DENSELEC);
     VectorVar** velocity = gridMgr->getVectorVariableOnG2(VELOCION);
     
@@ -371,15 +478,16 @@ void EleMagManager::calculateEnext(int phase){
     const double hypVis = loader->hyperviscosity;
     double dL, dP;
     
+    int istart = 1, iend = xSize+1, jstart = 1, jend = ySize+1, kstart = 1, kend = zSize+1;
     
+
     int i,j,k;
-    for ( i=1; i<xSize+1; i++){
-        for ( j=1; j<ySize+1; j++){
-            for ( k=1; k<zSize+1; k++){
+    for ( i=istart; i<iend; i++){
+        for ( j=jstart; j<jend; j++){
+            for ( k=kstart; k<kend; k++){
                 
                 idxG1 = IDX(i,j,k,xSize+1,ySize+1,zSize+1);
                 idxG2 = IDX(i,j,k,xSize+2,ySize+2,zSize+2);
-                
         
                 divP[0] = 0.0, divP[1] = 0.0, divP[2] = 0.0;
                 lapJ[0] = 0.0; lapJ[1] = 0.0; lapJ[2] = 0.0;
@@ -392,9 +500,9 @@ void EleMagManager::calculateEnext(int phase){
                         idxNeigbor = neighbourhood[8*idxG1+neighbour];
                         locB[coord] += 0.125*bField[idxNeigbor]->getValue()[coord];
                     }
-            
+                    
                     dP = deltas[coord];
-                    for (neighbour=0; neighbour<9; neighbour++){
+                    for( neighbour = 0; neighbour < 9; neighbour++ ){
                 
                         wei  = WEIHTS[neighbour];
                     
@@ -439,9 +547,13 @@ void EleMagManager::calculateEnext(int phase){
                 dens = density[idxG2]->getValue()[0];
                 const double* velI = velocity[idxG2]->getValue();
                 const double* J    = current[idxG2]->getValue();
-                
                 double revertdens = dens < EPS8 ? 0.0: edgeProfile(dens)/dens;
-        
+                vector<double> ideal = {0.0, 0.0, 0.0};
+                ideal[0] = -(velI[1]*locB[2] - velI[2]*locB[1]);
+                ideal[1] = -(velI[2]*locB[0] - velI[0]*locB[2]);
+                ideal[2] = -(velI[0]*locB[1] - velI[1]*locB[0]);
+                
+                
                 locE[0] = - (velI[1]*locB[2] - velI[2]*locB[1])
                           + (   J[1]*locB[2] -    J[2]*locB[1])*revertdens
                           - divP[0]*revertdens
@@ -456,26 +568,28 @@ void EleMagManager::calculateEnext(int phase){
                           + (   J[0]*locB[1] -    J[1]*locB[0])*revertdens
                           - divP[2]*revertdens
                           - hypVis*lapJ[2];
-
-#ifdef LOG
-                for ( int coord=0; coord < 3; coord++ ) {
-                    if( std::isnan(locE[coord])){
-                        write2Log(idxG2, i, j, k, velI, locB, divP, lapJ, J, dens);
+                
+                for ( coord = 0; coord < 3; coord++ ) {
+                    if( abs(locE[coord]) < cellBreakdownEfield[coord] ){
+                        gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, coord, locE[coord]);
+                    }else{
+                        if(abs(ideal[coord]) < cellBreakdownEfield[coord]){
+                            gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, coord, ideal[coord]);
+                        }
+                        #ifdef HEAVYLOG
+                            write2Log(idxG2, i, j, k, velI, locB, divP, lapJ, J, dens);
+                        #endif
                     }
                 }
-#endif
-                
-                gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, 0, locE[0]);
-                gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, 1, locE[1]);
-                gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, 2, locE[2]);
-                
                 
             }
         }
     }
  
     gridMgr->sendBoundary2Neighbor(eleField2save);
-    
+    gridMgr->applyBC(eleField2save);
+
+    gridMgr->smooth(eleField2save);
     gridMgr->applyBC(eleField2save);
     
     VectorVar** eField    = gridMgr->getVectorVariableOnG2(ELECTRIC);
@@ -485,8 +599,8 @@ void EleMagManager::calculateEnext(int phase){
     locE[0] = 0.0; locE[1] = 0.0; locE[2] = 0.0;
     switch (phase){
             case PREDICTOR:
-                for(int idx = 0; idx<totG2; idx++){
-                    for (coord=0; coord<3; coord++){
+                for( int idx = 0; idx < totG2; idx++ ){
+                    for( coord = 0; coord < 3; coord++ ){
                         locE[coord] =
                         - eField[idx]->getValue()[coord]+2.0*eFieldAux[idx]->getValue()[coord];
                         
@@ -495,8 +609,8 @@ void EleMagManager::calculateEnext(int phase){
                 }
             break;
             case CORRECTOR:
-                for(int idx = 0; idx<totG2; idx++){
-                    for (coord=0; coord<3; coord++){
+                for( int idx = 0; idx < totG2; idx++ ){
+                    for( coord = 0; coord < 3; coord++ ){
                         locE[coord] =
                         0.5*(eField[idx]->getValue()[coord]+eFieldAux[idx]->getValue()[coord]);
                         
@@ -519,10 +633,22 @@ void EleMagManager::calculateEnext(int phase){
 
 void EleMagManager::write2Log(int idxG2, int i, int j, int k, const double* velI,
                               double* locB, double* divP, double* lapJ, const double* J, double dens){
-    logger->writeMsg(("[EleMagManager] idxG2 =  "+to_string(idxG2)
+    
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    logger->writeMsg(("[EleMagManager] check cell idxG2 =  "+to_string(idxG2)
                       +"\n     i  = "+to_string(i)
                       +"\n     j  = "+to_string(j)
                       +"\n     k  = "+to_string(k)
+                      +"\n     x = "+to_string(domainShiftX + dx*i)
+                      +"\n     y = "+to_string(domainShiftY + dy*j)
+                      +"\n     z = "+to_string(domainShiftZ + dz*k)
                       +"\n     Vion_x  = "+to_string(velI[0])
                       +"\n     Vion_y  = "+to_string(velI[1])
                       +"\n     Vion_z  = "+to_string(velI[2])

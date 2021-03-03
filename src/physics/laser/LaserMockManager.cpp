@@ -47,6 +47,7 @@ void LaserMockManager::initialize(){
     double dy = loader->spatialSteps[1];
     double dz = loader->spatialSteps[2];
     
+    double energyOnDomain = 0.0;
     double G2shift = 0.5;
     double x,y,z;
     int i,j,k;
@@ -64,6 +65,8 @@ void LaserMockManager::initialize(){
                 
                 electronPressureProfile[idxOnG2] = pres;
                 
+                energyOnDomain += pres;
+                
                 dens = loader->getTargetIonDensityProfile(x,y,z);
                 
                 targetIonDensityProfile[idxOnG2] = dens;
@@ -71,6 +74,11 @@ void LaserMockManager::initialize(){
             }
         }
     }
+    
+    double TOT_IN_BOX = 0;
+    MPI_Allreduce(&energyOnDomain, &TOT_IN_BOX, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    logger->writeMsg(("[LaserMockManager] total energy loaded in the box per step = "
+                      +to_string(TOT_IN_BOX*loader->getTimeStep())).c_str(),  DEBUG);
     
 }
 
@@ -198,6 +206,20 @@ void LaserMockManager::accelerate(int i_time){
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     
     double G2shift = 0.5;
+    
+    VectorVar** pdriverr    = gridMgr->getVectorVariableOnG2(DRIVER);
+    double energyOnDomain = 0;
+    for( i = 0; i < xRes+1; i++){
+        for( j = 0; j < yRes+1; j++) {
+            for( k = 0; k < zRes+1; k++){
+                idxOnG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
+                const double* dr = pdriverr[idxOnG2]->getValue();
+                energyOnDomain += (dr[0]+dr[3]+dr[5])/3;
+            }
+        }
+    }
+    
+    
     // update only electrons
     for (i = 1; i < xRes + 1; i++) {
         for (j = 1; j < yRes + 1; j++) {
@@ -218,6 +240,25 @@ void LaserMockManager::accelerate(int i_time){
 
     gridMgr->sendBoundary2Neighbor(DRIVER);
     gridMgr->applyBC(DRIVER);
+    
+    double energyOnDomainNew = 0;
+    for( i = 0; i < xRes+1; i++ ){
+        for( j = 0; j < yRes+1; j++ ){
+            for( k = 0; k < zRes+1; k++ ){
+                idxOnG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
+                const double* dr = pdriverr[idxOnG2]->getValue();
+                energyOnDomainNew += (dr[0]+dr[3]+dr[5])/3;
+            }
+        }
+    }
+
+    double laserdelta = (energyOnDomainNew - energyOnDomain)*loader->getTimeStep();
+    double TOT_IN_BOX = 0;
+    MPI_Allreduce(&laserdelta, &TOT_IN_BOX, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    logger->writeMsg(("[LaserMockManager] instant added driver  = "
+                      +to_string(laserdelta)).c_str(),  DEBUG);
+    loader->loadedEnergyPerStep += laserdelta;
+
 
     auto end_time = high_resolution_clock::now();
     string msg ="[LaserMockManager] accelerate() duration = "

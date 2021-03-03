@@ -15,10 +15,9 @@ BoundaryManager::BoundaryManager(shared_ptr<Loader> ldr):loader(move(ldr)){
 void BoundaryManager::initialize(){
     logger->writeMsg("[BoundaryManager] initialize() ...", DEBUG);
     leavingParticles.reserve(NUM_OF_LEAVING_PACTICLES);
-    for(int t = 0; t < 27; t++) {
+    for( int t = 0; t < 27; t++ ){
         domain2send[t] = 0;
     }
-    
     logger->writeMsg("[BoundaryManager] initialize() ...OK", DEBUG);
 }
 
@@ -66,9 +65,13 @@ int BoundaryManager::isPtclOutOfDomain(double pos[3]){
     
     t = (1+c)+3*((1+b)+3*(1+a));
     
-#ifdef LOG
+
     if ( t < 0 || t > 26 || std::isnan(x) || std::isnan(y) || std::isnan(z) ){
-        string mssssd ="[BoundaryManager] check  t = "+to_string(t)
+        
+        t = IN; // keep particle on domain, pusher will remove it
+        
+        #ifdef HEAVYLOG
+        string pb ="[BoundaryManager] problem particle destination:  t = "+to_string(t)
         +"\n      x = "+to_string(x)
         +"\n      y = "+to_string(y)
         +"\n      z = "+to_string(z)
@@ -78,9 +81,10 @@ int BoundaryManager::isPtclOutOfDomain(double pos[3]){
         +"\n      a = "+to_string(a)
         +"\n      b = "+to_string(b)
         +"\n      c = "+to_string(c);
-        logger->writeMsg(mssssd.c_str(), DEBUG);
+        logger->writeMsg(pb.c_str(), CRITICAL);
+        #endif
     }
-#endif
+
     //left = 4 right = 22 top = 16 bottom = 10 back = 12 front = 14
     
     return (t == 13) ? IN : t;
@@ -131,7 +135,8 @@ void BoundaryManager::applyBC(Particle** particles,
     vector<int> removeFromLeaving;
     removeFromLeaving.reserve(leavingParticles.size());
 
-    int posShift = phase == CORRECTOR? 3 : 0;
+    int posShift = phase == CORRECTOR ? 3 : 0;
+    int outflowLeaving = 0;
     
     for ( int ptclNum = 0; ptclNum < leavingParticles.size(); ptclNum++ ){
         idx = leavingParticles[ptclNum];
@@ -170,9 +175,9 @@ void BoundaryManager::applyBC(Particle** particles,
         
         t = (1+c)+3*((1+b)+3*(1+a));
  
-#ifdef LOG
-        if ( t < 0 || t > 27 || std::isnan(x0) || std::isnan(y0) || std::isnan(z0) ){
-            string mssssd ="[BoundaryManager] idx = "+to_string(idx)
+#ifdef HEAVYLOG
+        if ( t < 0 || t > 26 || std::isnan(x0) || std::isnan(y0) || std::isnan(z0) ){
+            string pb ="[BoundaryManager] idx = "+to_string(idx)
             +"\n      x0 = "+to_string(x0)
             +"\n      y0 = "+to_string(y0)
             +"\n      z0 = "+to_string(z0)
@@ -186,7 +191,7 @@ void BoundaryManager::applyBC(Particle** particles,
             +"\n      b = "+to_string(b)
             +"\n      c = "+to_string(c)
             +"\n      t = "+to_string(t);
-            logger->writeMsg(mssssd.c_str(), DEBUG);
+            logger->writeMsg(pb.c_str(), CRITICAL);
         }
 #endif
         
@@ -194,35 +199,42 @@ void BoundaryManager::applyBC(Particle** particles,
             // need to send particle and need to remove from home domain
         }
         
-        if ( applyOutflowBC(particles[idx], phase) == 1 ) {
+//        if ( applyOutflowBC(particles[idx], phase) == 1 ) {
+//            //no need to send particle but need to remove from home domain
+//            // just keep it in leaving set and do not serialize
+//            continue;
+//        }
+        if ( applyOutflowBC(t) == 1 ) {
             //no need to send particle but need to remove from home domain
             // just keep it in leaving set and do not serialize
+            outflowLeaving++;
             continue;
         }
+
         
-        if ( applyReflectBC(particles[idx], phase) == 1 ) {
-            //no need to send particle no need to remove from home domain
-            // remove from leaving set and do not serialize
-            removeFromLeaving.push_back(ptclNum);
-            continue;
-        }
+        // reflect BCs are out-of-date
+//        if ( applyReflectBC(particles[idx], phase) == 1 ) {
+//            //no need to send particle no need to remove from home domain
+//            // remove from leaving set and do not serialize
+//            removeFromLeaving.push_back(ptclNum);
+//            continue;
+//        }
         
-        if(t != 13){
+        if( t != 13 ){
             particles[idx]->serialize(sendBuf[t], PARTICLES_SIZE*partcls2send[t]);
             partcls2send[t] += 1;
-        }else{
+        } else {
             removeFromLeaving.push_back(ptclNum);
         }
     }
     
-    string msd ="[BoundaryManager] total leaving = "
-                            +to_string(leavingParticles.size());
-    logger->writeMsg(msd.c_str(), DEBUG);
-    
-    for(int ptclNum = removeFromLeaving.size()-1; ptclNum >= 0 ; ptclNum--){
+    for( int ptclNum = removeFromLeaving.size()-1; ptclNum >= 0 ; ptclNum-- ){
         leavingParticles.erase(leavingParticles.begin()+removeFromLeaving[ptclNum]);
     }
-
+    
+    string msd ="[BoundaryManager] total leaving = "+to_string(leavingParticles.size())
+    + " / outflowLeaving = " + to_string(outflowLeaving);
+    logger->writeMsg(msd.c_str(), DEBUG);
     
     MPI_Status st;
     int receivedTot;
@@ -283,6 +295,40 @@ int BoundaryManager::applyOutflowBC(Particle* particle, int phase){
     }
     return remove;
 }
+
+int BoundaryManager::applyOutflowBC(int sendTo){
+    
+    int remove = 0;
+    
+    if ( loader->partclBCtype[0] == OUTFLOW_BC ){
+        if ( sendTo == NEIGHBOR_LEFT && loader->neighbors2Send[NEIGHBOR_LEFT] == MPI_PROC_NULL ){
+            remove = 1;
+        } else if ( sendTo == NEIGHBOR_RIGHT && loader->neighbors2Send[NEIGHBOR_RIGHT] == MPI_PROC_NULL){
+            remove = 1;
+        }
+    }
+    
+    if ( loader->partclBCtype[1] == OUTFLOW_BC ){
+        if ( sendTo == NEIGHBOR_BOTTOM && loader->neighbors2Send[NEIGHBOR_BOTTOM] == MPI_PROC_NULL){
+            remove = 1;
+        } else if ( sendTo == NEIGHBOR_TOP && loader->neighbors2Send[NEIGHBOR_TOP] == MPI_PROC_NULL){
+            remove = 1;
+        }
+    }
+    
+    if ( loader->partclBCtype[2] == OUTFLOW_BC ){
+        if ( sendTo == NEIGHBOR_BACK && loader->neighbors2Send[NEIGHBOR_BACK] == MPI_PROC_NULL){
+            remove = 1;
+        } else if ( sendTo == NEIGHBOR_FRONT && loader->neighbors2Send[NEIGHBOR_FRONT] == MPI_PROC_NULL){
+            remove = 1;
+        }
+    }
+    
+    return remove;
+}
+
+
+
 
 
 //shift coordinates
@@ -418,8 +464,29 @@ void BoundaryManager::storeParticle(int idx, double pos[3]){
     domain = (1+c)+3*((1+b)+3*(1+a));
 
     leavingParticles.push_back(idx);
-    // need to know before sending for memory preallocation
-    domain2send[domain] += 1;
+
+    
+    if ( domain < 0 || domain > 26){
+        #ifdef HEAVYLOG
+        string pb ="[BoundaryManager] problem to store idx = "+to_string(idx)
+        +"\n      x0 = "+to_string(x)
+        +"\n      y0 = "+to_string(y)
+        +"\n      z0 = "+to_string(z)
+        +"\n      pos[0] = "+to_string(pos[0])
+        +"\n      pos[1] = "+to_string(pos[1])
+        +"\n      pos[2] = "+to_string(pos[2])
+        +"\n      a = "+to_string(a)
+        +"\n      b = "+to_string(b)
+        +"\n      c = "+to_string(c)
+        +"\n      domain = "+to_string(domain);
+        logger->writeMsg(pb.c_str(), CRITICAL);
+        #endif
+    }else{
+        // need to know before sending for memory preallocation
+        domain2send[domain] += 1;
+    }
+    
+
 }
 
 

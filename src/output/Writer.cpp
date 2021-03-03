@@ -199,11 +199,6 @@ void Writer::writeAttributeDbl(hid_t fileID, hid_t group, hid_t dxpl_id,
 
 void Writer::writeAllForRestart(){
     
-    hsize_t dim[3];
-    for(int i=0; i<3; i++){
-        dim[i] = loader->totPixelsPerBoxSide[i];
-    }
-    
     int rank ;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     

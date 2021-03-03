@@ -45,12 +45,7 @@ void ModelInitializer::initialize()
 
 
 void ModelInitializer::readAllFromFile(){
-    
-    hsize_t dim[3];
-    for(int i=0; i<3; i++){
-        dim[i] = loader->totPixelsPerBoxSide[i];
-    }
-    
+
     int rank ;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
@@ -272,7 +267,6 @@ void ModelInitializer::initVariablesonG2(){
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     double x,y,z;
     
-    const double T0 = 1.0;
     double G2shift = 0.5;
     int numOfSpecies = loader->getNumberOfSpecies();
     double densTot = 0.0, densTotLoc = 0.0, dens = 0.0, pres;
@@ -285,16 +279,17 @@ void ModelInitializer::initVariablesonG2(){
     
     prtcleWeight.reserve(numOfSpecies);
     
-    for(spn = 0; spn<numOfSpecies;spn++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
         densDomain.push_back(0.0);
         locMIN4species.push_back(BIGN);//big number
         locMAX4species.push_back(0.0);
         prtcleWeight.push_back(0.0);
         npc.push_back(0);
     }
-    for ( i=0; i<xRes; i++){
-        for ( j=0; j<yRes; j++){
-            for ( k=0; k<zRes; k++){
+    
+    for( i = 0; i < xRes; i++ ){
+        for( j = 0; j < yRes; j++ ){
+            for( k = 0; k < zRes; k++ ){
                 
                 idx = IDX(i+1,j+1,k+1,xResG2,yResG2,zResG2);
                 
@@ -303,20 +298,20 @@ void ModelInitializer::initVariablesonG2(){
                 z = (k + G2shift)*cellSizeZ + domainShiftZ;
                 
                 densTotLoc = 0.0;
-                for(spn = 0; spn<numOfSpecies;spn++){
+                for( spn = 0; spn < numOfSpecies; spn++ ){
                     dens = loader->getDensity(x, y, z, spn);
                     
-                    //need only for particles initialization
-                    //density is managed by HydroManager.cpp
+                    // need only for particles initialization
+                    // density is managed by HydroManager.cpp
                     // no need in boundary MPI communication
                     gridMng->setVectorVariableForNodeG2(idx, gridMng->DENS_VEL(spn), 0, dens);
                     
                     densDomain[spn] += dens;
                     densTotLoc += dens;
-                    if(dens < locMIN4species[spn]){
+                    if( dens < locMIN4species[spn] ){
                         locMIN4species[spn] = dens;
                     }
-                    if(dens > locMAX4species[spn]){
+                    if( dens > locMAX4species[spn] ){
                         locMAX4species[spn] = dens;
                     }
                 }
@@ -336,18 +331,18 @@ void ModelInitializer::initVariablesonG2(){
     int partclNumPerDomain;
     double globalMaximumDens;
     int sum = 0;
-    for(spn = 0; spn<numOfSpecies;spn++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
         
         localMinimumDens = locMIN4species[spn];
         MPI_Allreduce(&localMinimumDens, &globalMinimumDens, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
         localMaximumDens = locMAX4species[spn];
         MPI_Allreduce(&localMaximumDens, &globalMaximumDens, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
         
-        if(globalMinimumDens <= 0.0){
-            globalMinimumDens = localMaximumDens;
+        if( globalMinimumDens <= 0.0 ){
+            globalMinimumDens = localMaximumDens > 0.0 ? localMaximumDens : globalMaximumDens;
         }
         
-        if(globalMinimumDens <= loader->minimumDens2ResolvePPC){
+        if( globalMinimumDens <= loader->minimumDens2ResolvePPC ){
             globalMinimumDens = loader->minimumDens2ResolvePPC;
         }
         
@@ -357,13 +352,27 @@ void ModelInitializer::initVariablesonG2(){
         npc[spn] = partclNumPerDomain;
         sum += partclNumPerDomain;
         
+        // additional check for extraordinary situations
+        double localWeight = prtcleWeight[spn];
+        double globWeightMax;
+        double globWeightMin;
+        
+        MPI_Allreduce(&localWeight, &globWeightMin, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
+        MPI_Allreduce(&localWeight, &globWeightMax, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+        
+        if( globWeightMax != globWeightMin ){
+            throw runtime_error(" Different particle weight on different domains!");
+        }
+
+        
         logger->writeMsg(("[ModelInitializer] particle weight for species "+to_string(spn+1)
                           +" = "+to_string(prtcleWeight[spn])
                           +"\n"+string( 17, ' ' )+" required particles number for domain "+to_string(rank)
                           +" =  "+to_string(partclNumPerDomain)
-                          +"\n"+string( 17, ' ' )+" npc[spn]  = "+to_string(npc[spn])
                           +"\n"+string( 17, ' ' )+" globalMinimumDens  = "+to_string(globalMinimumDens)
-                          +"\n"+string( 17, ' ' )+" globalMaximumDens  = "+to_string(globalMaximumDens)).c_str(),  DEBUG);
+                          +"\n"+string( 17, ' ' )+" globalMaximumDens  = "+to_string(globalMaximumDens)
+                          +"\n"+string( 17, ' ' )+" localMinimumDens  = "+to_string(localMinimumDens)
+                          +"\n"+string( 17, ' ' )+" localMaximumDens  = "+to_string(localMaximumDens)).c_str(),  DEBUG);
     }
     totParticleNumberInDomain = sum;
     MPI_Allreduce(&densTot, &totalDensityInTHEbox, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -401,7 +410,7 @@ void ModelInitializer::initParticles(){
     
     int ppc = loader->getParticlesPerCellNumber();
     
-    if (totParticleNumberInDomain <= 0){
+    if( totParticleNumberInDomain <= 0 ){
         throw runtime_error("Check initialization, particles number in domain = "
                             +to_string(totParticleNumberInDomain));
     }
@@ -420,7 +429,7 @@ void ModelInitializer::initParticles(){
     
     map<int, VectorVar**> dens;
     
-    for(spn = 0; spn<numOfSpecies;spn++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
         pusher->setParticleMass4Type(spn, loader->getMass4spieceies(spn));
         pusher->setParticleCharge4Type(spn, loader->getCharge4spieceies(spn));
         pusher->setParticleWeight4Type(spn, prtcleWeight[spn]);

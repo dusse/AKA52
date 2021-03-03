@@ -27,9 +27,12 @@ private:
     double* pressuNext;
     double* electrnVel;
     double* bfieldPrev;
+    double* pressuInit;
+    double* pressureDampingCoeff;
     
     void initialize();
     void initPressure();
+    void initPressureDampingCoeff();
     
     void subCycledPressure(int, int);
     void implicitPressure(int, int);
@@ -41,7 +44,6 @@ private:
     
     void transformMatrix(double[3][3], double[3][3], double[3][3], int);
     void ortho(double[3], double[3][3]);
-    
     
 public:
     ClosureManager(std::shared_ptr<Loader>, std::shared_ptr<GridManager>);

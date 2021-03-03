@@ -22,8 +22,9 @@ ClosureManager::~ClosureManager(){
     delete[] driverNext;
     delete[] pressuNext;
     delete[] electrnVel;
-
+    delete[] pressuInit;
     delete[] bfieldPrev;
+    delete[] pressureDampingCoeff;
     
 }
 
@@ -37,19 +38,22 @@ void ClosureManager::initialize(){
     
     driverNext = new double[nG2*6*sizeof(double)];
     pressuNext = new double[nG2*6*sizeof(double)];
+    pressuInit = new double[nG2*6*sizeof(double)];
     electrnVel = new double[nG2*3*sizeof(double)];
     
     emass = loader->electronmass;
     
     initPressure();
+    initPressureDampingCoeff();
     
     int h, ijkG1, ijkG2;
    
     VectorVar** pressure = gridMgr->getVectorVariableOnG2(PRESSURE);
+    double pres;
     
     for (ijkG2 = 0; ijkG2 < nG2; ijkG2++) {
         for (h = 0; h < 6; h++) {
-            double pres = pressure[ijkG2]->getValue()[h];
+            pres = pressure[ijkG2]->getValue()[h];
             pressuNext[6*ijkG2+h] = pres;
             driverNext[6*ijkG2+h] = pres;
         }
@@ -70,6 +74,112 @@ void ClosureManager::initialize(){
     
     calculatePressure(PREDICTOR, -1);
     calculatePressure(CORRECTOR, -1);
+}
+
+void ClosureManager::initPressureDampingCoeff(){
+
+    //needed for open boundary conditions
+    int xRes = loader->resolution[0],
+        yRes = loader->resolution[1],
+        zRes = loader->resolution[2];
+    int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
+    
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    double Lx = loader->boxSizes[0],
+           Ly = loader->boxSizes[1],
+           Lz = loader->boxSizes[2];
+    
+    int idx2use;
+    int nG2 = xResG2*yResG2*zResG2;
+    int i, j, k;
+    
+    pressureDampingCoeff = new double[nG2*sizeof(double)];
+    
+    for( int idx = 0; idx < nG2; idx++ ){
+        pressureDampingCoeff[idx] = 1.0;
+    }
+    
+    double leftXWidth = loader->dampingBoundaryWidth[0][0];
+    double rigtXWidth = loader->dampingBoundaryWidth[0][1];
+    
+    double leftYWidth = loader->dampingBoundaryWidth[1][0];
+    double rigtYWidth = loader->dampingBoundaryWidth[1][1];
+    
+    double leftZWidth = loader->dampingBoundaryWidth[2][0];
+    double rigtZWidth = loader->dampingBoundaryWidth[2][1];
+    
+    double normLengthXleft, normLengthXrigt,
+           normLengthYleft, normLengthYrigt,
+           normLengthZleft, normLengthZrigt;
+    
+    double x, y, z;
+    
+    for( i = 0; i < xResG2; i++ ){
+        for( j = 0; j < yResG2; j++ ){
+            for( k = 0; k < zResG2; k++ ){
+                
+                x = i*dx + domainShiftX;
+                y = j*dy + domainShiftY;
+                z = k*dz + domainShiftZ;
+                
+                idx2use = IDX(i,j,k, xResG2,yResG2,zResG2);
+                if( leftXWidth > 0.0 ){
+                    normLengthXleft = x/leftXWidth;
+                    if( abs(normLengthXleft) < 1){
+                        pressureDampingCoeff[idx2use] = normLengthXleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtXWidth > 0.0 ){
+                    normLengthXrigt = ( Lx + dx - x )/rigtXWidth;
+                    if( abs(normLengthXrigt) < 1 ){
+                        pressureDampingCoeff[idx2use] = normLengthXrigt;
+                        continue;
+                    }
+                }
+                
+                if( leftYWidth > 0.0 ){
+                    normLengthYleft = y/leftYWidth;
+                    if( abs(normLengthYleft) < 1 ){
+                        pressureDampingCoeff[idx2use] = normLengthYleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtYWidth > 0.0 ){
+                    normLengthYrigt = ( Ly + dy - y )/rigtYWidth;
+                    if( abs(normLengthYrigt) < 1 ){
+                        pressureDampingCoeff[idx2use] = normLengthYrigt;
+                        continue;
+                    }
+                }
+                
+                if( leftZWidth > 0.0 ){
+                    normLengthZleft = z/leftZWidth;
+                    if( abs(normLengthZleft) < 1 ){
+                        pressureDampingCoeff[idx2use] = normLengthZleft;
+                        continue;
+                    }
+                }
+                
+                if( rigtZWidth > 0.0 ){
+                    normLengthZrigt = ( Lz + dz - z )/rigtZWidth;
+                    if( abs(normLengthZrigt) < 1 ){
+                        pressureDampingCoeff[idx2use] = normLengthZrigt;
+                        continue;
+                    }
+                }
+            }
+        }
+    }
 }
 
 
@@ -136,6 +246,7 @@ void ClosureManager::initPressure(){
         for (int h = 0; h < 6; h++) {
             const double* dr = pdriverr[idxOnG2]->getValue();
             gridMgr->setVectorVariableForNodeG2(idxOnG2, DRIVER_AUX, h, dr[h]);
+            pressuInit[6*idxOnG2+h] = dr[h];
         }
     }
 }
@@ -188,52 +299,36 @@ void ClosureManager::transformMatrix(double old[3][3], double new_[3][3], double
 
 
 
-void ClosureManager::ortho(double bw[3], double aw[3][3]){
+void ClosureManager::ortho(double bField[3], double aw[3][3]){
     
-    double rw, sw;
+    double bmod;
     
-    /* __ modulus of b __ */
-    rw = sqrt(bw[0]*bw[0]+bw[1]*bw[1]+bw[2]*bw[2]);
+    bmod = sqrt(bField[0]*bField[0]+bField[1]*bField[1]+bField[2]*bField[2]);
     
-    if (rw < EPS8){
-        /* __ unit vector along b __ */
-        aw[0][0] = 1.0;
-        aw[0][1] = 0.0;
-        aw[0][2] = 0.0;
+    if( bmod < EPS8 ){
+        aw[0][0] = 1.0; aw[0][1] = 0.0; aw[0][2] = 0.0;
+        aw[1][0] = 0.0; aw[1][1] = 1.0; aw[1][2] = 0.0;
+        aw[2][0] = 0.0; aw[2][1] = 0.0; aw[2][2] = 1.0;
+    }else{
+        aw[0][0] = bField[0]/bmod;
+        aw[0][1] = bField[1]/bmod;
+        aw[0][2] = bField[2]/bmod;
         
-        /* __ unit vector perp to b __ */
-        aw[1][0] = 0.0;
-        aw[1][1] = 1.0;
-        aw[1][2] = 0.0;
-        
-        /* __ last unit vector for direct triedr __ */
-        aw[2][0] = 0.0;
-        aw[2][1] = 0.0;
-        aw[2][2] = 1.0;
-    }
-    else{
-        /* __ unit vector along b __ */
-        aw[0][0] = bw[0]/rw;
-        aw[0][1] = bw[1]/rw;
-        aw[0][2] = bw[2]/rw;
-        
-        /* __ unit vector perp to b __ */
-        if (aw[0][0] == aw[0][1] && aw[0][1] == aw[0][2]) {
-            aw[1][0] = aw[0][1];
+        if( aw[0][0] == aw[0][1] && aw[0][1] == aw[0][2] ){
+            aw[1][0] =  aw[0][1];
             aw[1][1] = -aw[0][0];
-            aw[1][2] = 0;
+            aw[1][2] =  0.0;
         } else {
             aw[1][0] = (aw[0][2] - aw[0][1]);
             aw[1][1] = (aw[0][0] - aw[0][2]);
             aw[1][2] = (aw[0][1] - aw[0][0]);
         }
         
-        sw = sqrt(aw[1][0]*aw[1][0] + aw[1][1]*aw[1][1] + aw[1][2]*aw[1][2]);
-        aw[1][0] /= sw;
-        aw[1][1] /= sw;
-        aw[1][2] /= sw;
+        bmod = sqrt(aw[1][0]*aw[1][0] + aw[1][1]*aw[1][1] + aw[1][2]*aw[1][2]);
+        aw[1][0] /= bmod;
+        aw[1][1] /= bmod;
+        aw[1][2] /= bmod;
         
-        /* __ last unit vector for direct triedr __ */
         aw[2][0] = aw[0][1]*aw[1][2]-aw[0][2]*aw[1][1];
         aw[2][1] = aw[0][2]*aw[1][0]-aw[0][0]*aw[1][2];
         aw[2][2] = aw[0][0]*aw[1][1]-aw[0][1]*aw[1][0];
@@ -466,28 +561,29 @@ void ClosureManager::implicitPressure(int phase, int i_time) {
     gridMgr->sendBoundary2Neighbor(PRESSURE);
     gridMgr->applyBC(PRESSURE);
     
-    if(i_time % loader->smoothStride == 0){
+    if( i_time % loader->smoothStride == 0 ){
         gridMgr->smooth(PRESSURE);
         gridMgr->applyBC(PRESSURE);
     }
     
-    for (ijkG2 = 0; ijkG2 < nG2; ijkG2++) {
-        for (h = 0; h < 6; h++) {
+    
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( h = 0; h < 6; h++ ){
             pressuNext[6*ijkG2+h] = pressure[ijkG2]->getValue()[h];
         }
     }
     
-    if (phase == PREDICTOR) {
-        for (ijkG2 = 0; ijkG2 < nG2; ijkG2++) {
-            for (h = 0; h < 6; h++) {
+    if( phase == PREDICTOR ) {
+        for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+            for( h = 0; h < 6; h++ ){
                 gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_AUX, h,
                                                     pressure[ijkG2]->getValue()[h]);
             }
         }
         
         VectorVar** bFieldKeep = gridMgr->getVectorVariableOnG1(MAGNETIC_AUX);
-        for (ijkG1 = 0; ijkG1 < nG1; ijkG1++) {
-            for (h = 0; h < 3; h++) {
+        for( ijkG1 = 0; ijkG1 < nG1; ijkG1++ ){
+            for( h = 0; h < 3; h++ ){
                 bfieldPrev[3*ijkG1+h] = bFieldKeep[ijkG1]->getValue()[h];
             }
         }
@@ -526,6 +622,14 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
     int nG2 = xResG2*yResG2*zResG2;
     int nG1 = xResG1*yResG1*zResG1;
     
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    
     int ijkG2, ijkG1, h, i, j, k, m;
     
     double pSub[6];
@@ -563,8 +667,8 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
         case PREDICTOR:
             magField2use = MAGNETIC_AUX;
             
-            for(ijkG2=0; ijkG2<nG2; ijkG2++){
-                for (h = 0; h < 6; h++) {
+            for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+                for( h = 0; h < 6; h++ ){
                     pSubAll[ijkG2*6+h] = pressureaux[ijkG2]->getValue()[h];
                 }
             }
@@ -572,8 +676,8 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
         case CORRECTOR:
             magField2use = MAGNETIC;
             
-            for(ijkG2=0; ijkG2<nG2; ijkG2++){
-                for (h = 0; h < 6; h++) {
+            for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+                for( h = 0; h < 6; h++ ){
                     pSubAll[ijkG2*6+h] = pressure[ijkG2]->getValue()[h];
                 }
             }
@@ -588,9 +692,9 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
     int neighbour, idxNeigbor;
     
     //precalculations
-    for (i = 1; i < xRes + 1; i++) {
-        for (j = 1; j < yRes + 1; j++) {
-            for (k = 1; k < zRes + 1; k++) {
+    for( i = 1; i < xRes + 1; i++ ){
+        for( j = 1; j < yRes + 1; j++ ){
+            for( k = 1; k < zRes + 1; k++ ){
                 
                 for (h = 0; h < 3; h++) {
                     vecBnext[h] = 0.0;
@@ -599,9 +703,9 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
                 
                 ijkG1 = IDX(i, j, k, xResG1, yResG1, zResG1);
                 
-                for (neighbour=0; neighbour<8; neighbour++){
+                for( neighbour = 0; neighbour < 8; neighbour++ ){
                     idxNeigbor = neighbourhood[8*ijkG1+neighbour];
-                    for (h = 0; h < 3; h++) {
+                    for( h = 0; h < 3; h++ ){
                         vecBnext[h] += 0.125*bField[idxNeigbor]->getValue()[h];
                         vecB[h]     += 0.125*bfieldPrev[3*idxNeigbor+h];
                     }
@@ -609,18 +713,18 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
                 
                 ijkG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
                 
-                for (h = 0; h < 3; h++) {
+                for( h = 0; h < 3; h++ ){
                     vecBstartAll[ijkG2*3+h] = vecB[h];
                     vecBstepAll [ijkG2*3+h] = (vecBnext[h]-vecB[h])/numOfSubStep;
                 }
                 
-                for (h = 0; h < 6; h++) {
+                for( h = 0; h < 6; h++ ){
                     pSub[h] = pSubAll[ijkG2*6+h];
                 }
                 
                 setIsotropization(pSub, iTerm);
                 
-                for (h = 0; h < 6; h++) {
+                for( h = 0; h < 6; h++ ){
                     iTermAll[ijkG2*6+h] = iTerm[h];
                 }
                 
@@ -635,25 +739,25 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
     
     
     
-    for (i = 1; i < xRes + 1; i++) {
-        for (j = 1; j < yRes + 1; j++) {
-            for (k = 1; k < zRes + 1; k++) {
+    for( i = 1; i < xRes + 1; i++ ){
+        for( j = 1; j < yRes + 1; j++ ){
+            for( k = 1; k < zRes + 1; k++ ){
                 
                 ijkG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
                 
-                for (h = 0; h < 6; h++) {
+                for( h = 0; h < 6; h++ ){
                     pSub[h] = pSubAll[ijkG2*6+h];
                 }
                 
                 const double* dr = pdriverr[ijkG2]->getValue();
                 
-                for (m = 0; m < numOfSubStep; m++) {
+                for( m = 0; m < numOfSubStep; m++ ){
                     
-                    for (h = 0; h < 6; h++) {
+                    for( h = 0; h < 6; h++ ){
                         cTerm[h] = 0.0;
                     }
                     
-                    for (h = 0; h < 3; h++) {
+                    for( h = 0; h < 3; h++ ){
                         vecB[h] = vecBstartAll[ijkG2*3+h] + m*vecBstepAll[ijkG2*3+h];
                         unitB[h] = 0.0;
                     }
@@ -662,9 +766,9 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
                     
                     omega = 0.0;
                     
-                    if ( modulusB > EPS8 ) {
+                    if( modulusB > EPS8 ){
                         
-                        for (int h = 0; h < 3; h++) {
+                        for( int h = 0; h < 3; h++ ){
                             unitB[h] = vecB[h]/modulusB;
                         }
                         omega = modulusB/emass;
@@ -684,63 +788,72 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
                         
                         cTerm[5] = -( 2.0*(pSub[2]*unitB[1]-pSub[4]*unitB[0]) );
                     }
-                    int writelog = 0;
-                    for (h = 0; h < 6; h++) {
-                        pSub[h] += subDt*( dr[h] + omega*cTerm[h] + iTermAll[ijkG2*6+h]);
-                        
-#ifdef LOG
-                        if (std::isnan(pSub[h]) || abs(pSub[h]) > 1000){
-                            writelog = 1;
-                        }
-#endif
+                    
+                    for ( h = 0; h < 6; h++ ){
+                        pSub[h] += subDt*( dr[h] + omega*cTerm[h] + iTermAll[ijkG2*6+h])*pressureDampingCoeff[ijkG2];
+                    }
+    
+                }
+                double trP = pSub[0]+pSub[3]+pSub[5];
+                if( trP < 0.0 || pSub[0] < 0 || pSub[3] < 0 || pSub[5] < 0){
+                    
+                    for( h = 0; h < 6; h++ ){
+                        pSub[h] = pressure[ijkG2]->getValue()[h];
                     }
                     
-                    if ( (pSub[0]+pSub[3]+pSub[5]) < 0.0){
-                        writelog = 1;
-                    }
-                    
-                    if(writelog == 1){
-                        string err ="[ClosureManager] pSub[0] = "+to_string(pSub[0])
-                        +"\n pSub[1] = "+to_string(pSub[1])
-                        +"\n pSub[2] = "+to_string(pSub[2])
-                        +"\n pSub[3] = "+to_string(pSub[3])
-                        +"\n pSub[4] = "+to_string(pSub[4])
-                        +"\n pSub[5] = "+to_string(pSub[5])
-                        +"\n dr[0] = "+to_string(dr[0])
-                        +"\n dr[1] = "+to_string(dr[1])
-                        +"\n dr[2] = "+to_string(dr[2])
-                        +"\n dr[3] = "+to_string(dr[3])
-                        +"\n dr[4] = "+to_string(dr[4])
-                        +"\n dr[5] = "+to_string(dr[5])
-                        +"\n    cTerm[0] = "+to_string(cTerm[0])
-                        +"\n    cTerm[1] = "+to_string(cTerm[1])
-                        +"\n    cTerm[2] = "+to_string(cTerm[2])
-                        +"\n    cTerm[3] = "+to_string(cTerm[3])
-                        +"\n    cTerm[4] = "+to_string(cTerm[4])
-                        +"\n    cTerm[5] = "+to_string(cTerm[5])
-                        +"\n    Bunit[0] = "+to_string(unitB[0])
-                        +"\n    Bunit[1] = "+to_string(unitB[1])
-                        +"\n    Bunit[2] = "+to_string(unitB[2])
-                        +"\n    omega = "+to_string(omega)
-                        +"\n    iTermAll[0] = "+to_string(iTermAll[ijkG2*6+0])
-                        +"\n    iTermAll[1] = "+to_string(iTermAll[ijkG2*6+1])
-                        +"\n    iTermAll[2] = "+to_string(iTermAll[ijkG2*6+2])
-                        +"\n    iTermAll[3] = "+to_string(iTermAll[ijkG2*6+3])
-                        +"\n    iTermAll[4] = "+to_string(iTermAll[ijkG2*6+4])
-                        +"\n    iTermAll[5] = "+to_string(iTermAll[ijkG2*6+5])
-                        +"\n    ijkG2 = "+to_string(ijkG2)
-                        +"\n    subcycle m = "+to_string(m)
-                        +"\n    i = "+to_string(i)
-                        +"\n    j = "+to_string(j)
-                        +"\n    k = "+to_string(k)
-                        +"\n    Xshift = "+to_string(loader->boxCoordinates[0][0])
-                        +"\n    Yshift = "+to_string(loader->boxCoordinates[1][0])
-                        +"\n    Zshift = "+to_string(loader->boxCoordinates[2][0]);
-                        logger->writeMsg(err.c_str(), CRITICAL);
-                    }
+                    #ifdef HEAVYLOG
+                    string err ="[ClosureManager] negative temperature: \n pSub[0] = "+to_string(pSub[0])
+                    +"\n pSub[1] = "+to_string(pSub[1])
+                    +"\n pSub[2] = "+to_string(pSub[2])
+                    +"\n pSub[3] = "+to_string(pSub[3])
+                    +"\n pSub[4] = "+to_string(pSub[4])
+                    +"\n pSub[5] = "+to_string(pSub[5])
+                    +"\n   dr[0] = "+to_string(dr[0])
+                    +"\n   dr[1] = "+to_string(dr[1])
+                    +"\n   dr[2] = "+to_string(dr[2])
+                    +"\n   dr[3] = "+to_string(dr[3])
+                    +"\n   dr[4] = "+to_string(dr[4])
+                    +"\n   dr[5] = "+to_string(dr[5])
+                    +"\n    cTerm[0] = "+to_string(cTerm[0])
+                    +"\n    cTerm[1] = "+to_string(cTerm[1])
+                    +"\n    cTerm[2] = "+to_string(cTerm[2])
+                    +"\n    cTerm[3] = "+to_string(cTerm[3])
+                    +"\n    cTerm[4] = "+to_string(cTerm[4])
+                    +"\n    cTerm[5] = "+to_string(cTerm[5])
+                    +"\n  Bunit[0] = "+to_string(unitB[0])
+                    +"\n  Bunit[1] = "+to_string(unitB[1])
+                    +"\n  Bunit[2] = "+to_string(unitB[2])
+                    +"\n omega = "+to_string(omega)
+                    +"\n   iTermAll[0] = "+to_string(iTermAll[ijkG2*6+0])
+                    +"\n   iTermAll[1] = "+to_string(iTermAll[ijkG2*6+1])
+                    +"\n   iTermAll[2] = "+to_string(iTermAll[ijkG2*6+2])
+                    +"\n   iTermAll[3] = "+to_string(iTermAll[ijkG2*6+3])
+                    +"\n   iTermAll[4] = "+to_string(iTermAll[ijkG2*6+4])
+                    +"\n   iTermAll[5] = "+to_string(iTermAll[ijkG2*6+5])
+                    +"\n  ijkG2 = "+to_string(ijkG2)
+                    +"\n  subcycle m = "+to_string(m)
+                    +"\n x = "+to_string(domainShiftX + dx*i)
+                    +"\n y = "+to_string(domainShiftY + dy*j)
+                    +"\n z = "+to_string(domainShiftZ + dz*k)
+                    +"\n i = "+to_string(i)
+                    +"\n j = "+to_string(j)
+                    +"\n k = "+to_string(k)
+                    +"\n   Xshift = "+to_string(domainShiftX)
+                    +"\n   Yshift = "+to_string(domainShiftY)
+                    +"\n   Zshift = "+to_string(domainShiftZ)
+                    +"\n   +++++++++++++++++++++++++++++++++++";;
+                    logger->writeMsg(err.c_str(), CRITICAL);
+                    #endif
+                }else if( trP > loader->criticalPressure ){
+                    pSub[0] = 0.1*loader->criticalPressure;
+                    pSub[1] = 0.0;
+                    pSub[2] = 0.0;
+                    pSub[3] = 0.1*loader->criticalPressure;
+                    pSub[4] = 0.0;
+                    pSub[5] = 0.1*loader->criticalPressure;
                 }
                 
-                for (h = 0; h < 6; h++) {
+                for( h = 0; h < 6; h++ ){
                     pSubAll[ijkG2*6+h] = pSub[h];
                 }
                 
@@ -754,9 +867,9 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
     logger->writeMsg(msg212.c_str(), DEBUG);
     
     
-    for (i = 1; i < xRes + 1; i++) {
-        for (j = 1; j < yRes + 1; j++) {
-            for (k = 1; k < zRes + 1; k++) {
+    for( i = 1; i < xRes + 1; i++ ){
+        for( j = 1; j < yRes + 1; j++ ){
+            for( k = 1; k < zRes + 1; k++ ){
                 ijkG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
                 for (h = 0; h < 6; h++) {
                     gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE, h, pSubAll[ijkG2*6+h]);
@@ -774,28 +887,34 @@ void ClosureManager::subCycledPressure(int phase, int i_time) {
     gridMgr->sendBoundary2Neighbor(PRESSURE);
     gridMgr->applyBC(PRESSURE);
     
-    if(i_time % loader->smoothStride == 0){
-        gridMgr->smooth(PRESSURE);
-        gridMgr->applyBC(PRESSURE);
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( int h = 0; h < 6; h++) {
+            gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, h,
+                                                pressure[ijkG2]->getValue()[h]);
+        }
     }
     
-    for (ijkG2 = 0; ijkG2 < nG2; ijkG2++) {
-        for (h = 0; h < 6; h++) {
+    gridMgr->smooth(PRESSURE_SMO);
+    gridMgr->applyBC(PRESSURE_SMO);
+    
+    
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( h = 0; h < 6; h++ ){
             pressuNext[6*ijkG2+h] = pressure[ijkG2]->getValue()[h];
         }
     }
     
-    if (phase == PREDICTOR) {
-        for (ijkG2 = 0; ijkG2 < nG2; ijkG2++) {
-            for (h = 0; h < 6; h++) {
+    if( phase == PREDICTOR ){
+        for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+            for( h = 0; h < 6; h++ ){
                 gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_AUX, h,
                                                     pressure[ijkG2]->getValue()[h]);
             }
         }
         
         VectorVar** bFieldKeep = gridMgr->getVectorVariableOnG1(MAGNETIC_AUX);
-        for (ijkG1 = 0; ijkG1 < nG1; ijkG1++) {
-            for (h = 0; h < 3; h++) {
+        for( ijkG1 = 0; ijkG1 < nG1; ijkG1++ ){
+            for( h = 0; h < 3; h++ ){
                 bfieldPrev[3*ijkG1+h] = bFieldKeep[ijkG1]->getValue()[h];
             }
         }
@@ -842,8 +961,8 @@ void ClosureManager::setDriver(int phase){
     
     VectorVar** current = gridMgr->getVectorVariableOnG2(CURRENT);
     
-    for(ijkG2=0; ijkG2<nG2; ijkG2++){
-        for (h = 0; h < 3; h++) {
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( h = 0; h < 3; h++ ){
             gridMgr->setVectorVariableForNodeG2(ijkG2, CURRENT_AUX, h,
                                                 current[ijkG2]->getValue()[h]);
         }
@@ -859,18 +978,26 @@ void ClosureManager::setDriver(int phase){
     const double* jcur;
     const double* edens;
     const double* vion;
+    
+    #ifdef HEAVYLOG
     double ts = loader->getTimeStep();
-    
     double cflvel[3];
-    
-    for(int coord=0; coord < 3; coord++){
-        cflvel[coord] = loader->spatialSteps[coord]/ts;
+    for( int coord = 0; coord < 3; coord++ ){
+        cflvel[coord] = 0.5*loader->spatialSteps[coord]/ts;
     }
+    #endif
+
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
     
-       
-    for (i = 0; i < xRes + 2; i++) {
-        for (j = 0; j < yRes + 2; j++) {
-            for (k = 0; k < zRes + 2; k++) {
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    for( i = 0; i < xRes + 2; i++ ){
+        for (j = 0; j < yRes + 2; j++ ){
+            for (k = 0; k < zRes + 2; k++ ){
                 
                 ijkG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
                 
@@ -879,14 +1006,12 @@ void ClosureManager::setDriver(int phase){
                 vion = velocity[ijkG2]->getValue();
                 
                 double revertdens = edens[0] < EPS8 ? 0.0 : edgeProfile(edens[0])/edens[0];
-                for (l = 0; l < 3; l++) {
+                for( l = 0; l < 3; l++ ){
                     electrnVel[3*ijkG2+l] = vion[l]-(jcur[l]*revertdens);
-#ifdef LOG
+                    
+                    #ifdef HEAVYLOG
                     if( electrnVel[3*ijkG2+l] > cflvel[l] ){
-                        string err1 ="[ClosureManager] OIOIOIOIOIOIOIOIOIIO    ijkG2 = "+to_string(ijkG2)
-                        +"\n    i = "+to_string(i)
-                        +"\n    j = "+to_string(j)
-                        +"\n    k = "+to_string(k)
+                        string err1 ="[ClosureManager] electron velocity growth detected:\n     ijkG2 = "+to_string(ijkG2)
                         +"\n    Vex = "+to_string(electrnVel[3*ijkG2+0])
                         +"\n    Vey = "+to_string(electrnVel[3*ijkG2+1])
                         +"\n    Vez = "+to_string(electrnVel[3*ijkG2+2])
@@ -897,29 +1022,39 @@ void ClosureManager::setDriver(int phase){
                         +"\n    Jy = "+to_string(jcur[1])
                         +"\n    Jz = "+to_string(jcur[2])
                         +"\n    revertdens = "+to_string(revertdens)
-                        +"\n    edens = "+to_string(edens[0]);
-                        
+                        +"\n    edens = "+to_string(edens[0])
+                        +"\n    i = "+to_string(i)
+                        +"\n    j = "+to_string(j)
+                        +"\n    k = "+to_string(k)
+                        +"\n    x = "+to_string(domainShiftX + dx*i)
+                        +"\n    y = "+to_string(domainShiftY + dy*j)
+                        +"\n    z = "+to_string(domainShiftZ + dz*k)
+                        +"\n    domainShiftX = "+to_string(domainShiftX)
+                        +"\n    domainShiftY = "+to_string(domainShiftY)
+                        +"\n    domainShiftZ = "+to_string(domainShiftZ)
+                        +"\n    VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
                         logger->writeMsg(err1.c_str(), CRITICAL);
+                       
                     }
-#endif
+                    #endif
             
                     gridMgr->setVectorVariableForNodeG2(ijkG2, VELOCELE, l,
                                                 electrnVel[3*ijkG2+l]);
-            
                 }
             }
         }
     }
     
+    gridMgr->applyBC(VELOCELE);
     
     double pe[3][3];
     double nabV[3][3];
     double nabP[3][3][3];
     int n;
     
-    for (i = 1; i < xRes + 1; i++) {
-        for (j = 1; j < yRes + 1; j++) {
-            for (k = 1; k < zRes + 1; k++) {
+    for( i = 1; i < xRes + 1; i++ ){
+        for( j = 1; j < yRes + 1; j++ ){
+            for( k = 1; k < zRes + 1; k++ ){
                 
                 ijkG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
                 
@@ -931,13 +1066,13 @@ void ClosureManager::setDriver(int phase){
                 
                 double divV = nabV[0][0]+nabV[1][1]+nabV[2][2];
                 
-                for (l = 0; l < 3; l++) {
-                    for (m = l; m < 3; m++) {
+                for( l = 0; l < 3; l++ ){
+                    for( m = l; m < 3; m++ ){
                         
                         /* __ P nabla . V __ */
                         dTerms[l][m] = -pe[l][m]*divV;
                         
-                        for (n = 0; n < 3; n++) {
+                        for( n = 0; n < 3; n++ ){
                             /* __ V . nabla P __ */
                             dTerms[l][m] -= electrnVel[3*ijkG2+n]*nabP[n][l][m];
                             /* __ P . nabla V __ */
@@ -948,53 +1083,66 @@ void ClosureManager::setDriver(int phase){
                         /* __ & set symmetrical terms __ */
                         dTerms[m][l] = dTerms[l][m];
 
-#ifdef LOG
-                        if(std::isnan(dTerms[m][l]) || abs(dTerms[m][l]) > BIGN){
-                                string err ="[ClosureManager] dTerms["
-                                +to_string(m)+"]["
-                                +to_string(l)+"] = "
+                    #ifdef HEAVYLOG
+                        if( abs(dTerms[m][l]) > BIGN
+                           || ( l == m && pe[l][m] > 0.0 && (pe[l][m]+ts*dTerms[l][m]) < 0.0 ) ){
+                                string err ="[ClosureManager] driver problem: dTerms[" +to_string(m)+"]["+to_string(l)+"] = "
                                 +to_string(dTerms[m][l])
+                                +"\n    pe[" +to_string(l)+"][" +to_string(m)+"]+ts*dTerms["
+                                +to_string(l)+"][" +to_string(m)+"] = "+to_string(pe[l][m]+ts*dTerms[l][m])
+                                +"\n   ts = "+to_string(ts)
+                                +"\n    -pe["+to_string(l)+"][" +to_string(m)+"]*divV = "+to_string(-pe[l][m]*divV)
                                 +"\n   divV = "+to_string(divV)
                                 +"\n   nabV[0][0] = "+to_string(nabV[0][0])
                                 +"\n   nabV[1][1] = "+to_string(nabV[1][1])
                                 +"\n   nabV[2][2] = "+to_string(nabV[2][2])
-                                +"\n     -pe[l][m]*divV = "+to_string( -pe[l][m]*divV)
                                 +"\n    electrnVel[3*"+to_string(ijkG2)+"+0] = "
                                 +to_string(electrnVel[3*ijkG2+0])
                                 +"\n    electrnVel[3*"+to_string(ijkG2)+"+1] = "
                                 +to_string(electrnVel[3*ijkG2+1])
                                 +"\n    electrnVel[3*"+to_string(ijkG2)+"+2] = "
                                 +to_string(electrnVel[3*ijkG2+2])
-                                +"\n    electrnVel[3*"+to_string(ijkG2)+"+0]*nabP[0][l][m] = "
-                                +to_string(electrnVel[3*ijkG2+0]*nabP[0][l][m])
-                                +"\n    electrnVel[3*"+to_string(ijkG2)+"+1]*nabP[1][l][m] = "
-                                +to_string(electrnVel[3*ijkG2+1]*nabP[1][l][m])
-                                +"\n    electrnVel[3*"+to_string(ijkG2)+"+2]*nabP[2][l][m] = "
-                                +to_string(electrnVel[3*ijkG2+2]*nabP[2][l][m])
-                                +"\n    pe[l][0]*nabV[0][m] = "+to_string(pe[l][0]*nabV[0][m])
-                                +"\n    pe[l][1]*nabV[1][m] = "+to_string(pe[l][1]*nabV[1][m])
-                                +"\n    pe[l][2]*nabV[2][m] = "+to_string(pe[l][2]*nabV[2][m])
-                                +"\n    pe[m][n]*nabV[0][l] = "+to_string(pe[m][0]*nabV[0][l])
-                                +"\n    pe[m][n]*nabV[1][l] = "+to_string(pe[m][1]*nabV[1][l])
-                                +"\n    pe[m][n]*nabV[2][l] = "+to_string(pe[m][2]*nabV[2][l])
-                                +"\n    pe[l][0] = "+to_string(pe[l][0])
-                                +"\n    pe[l][1] = "+to_string(pe[l][1])
-                                +"\n    pe[l][2] = "+to_string(pe[l][2])
-                                +"\n    pe[m][n] = "+to_string(pe[m][0])
-                                +"\n    pe[m][n] = "+to_string(pe[m][1])
-                                +"\n    pe[m][n] = "+to_string(pe[m][2])
+                                +"\n   nabP[0]["+to_string(l)+"][" +to_string(m)+"] = "+to_string(nabP[0][l][m])
+                                +"\n   nabP[1]["+to_string(l)+"][" +to_string(m)+"] = "+to_string(nabP[1][l][m])
+                                +"\n   nabP[2]["+to_string(l)+"][" +to_string(m)+"] = "+to_string(nabP[2][l][m])
+                                +"\n    -electrnVel[3*"+to_string(ijkG2)+"+0]*nabP[0]["+to_string(l)+"][" +to_string(m)+"] = "
+                                +to_string(-electrnVel[3*ijkG2+0]*nabP[0][l][m])
+                                +"\n    -electrnVel[3*"+to_string(ijkG2)+"+1]*nabP[1]["+to_string(l)+"][" +to_string(m)+"] = "
+                                +to_string(-electrnVel[3*ijkG2+1]*nabP[1][l][m])
+                                +"\n    -electrnVel[3*"+to_string(ijkG2)+"+2]*nabP[2]["+to_string(l)+"][" +to_string(m)+"] = "
+                                +to_string(-electrnVel[3*ijkG2+2]*nabP[2][l][m])
+                                +"\n    -pe["+to_string(l)+"][0]*nabV[0]["+to_string(m)+"] = "+to_string(-pe[l][0]*nabV[0][m])
+                                +"\n    -pe["+to_string(l)+"][1]*nabV[1]["+to_string(m)+"] = "+to_string(-pe[l][1]*nabV[1][m])
+                                +"\n    -pe["+to_string(l)+"][2]*nabV[2]["+to_string(m)+"] = "+to_string(-pe[l][2]*nabV[2][m])
+                                +"\n    -pe["+to_string(m)+"][0]*nabV[0]["+to_string(l)+"] = "+to_string(-pe[m][0]*nabV[0][l])
+                                +"\n    -pe["+to_string(m)+"][1]*nabV[1]["+to_string(l)+"] = "+to_string(-pe[m][1]*nabV[1][l])
+                                +"\n    -pe["+to_string(m)+"][2]*nabV[2]["+to_string(l)+"] = "+to_string(-pe[m][2]*nabV[2][l])
+                                +"\n    pe["+to_string(l)+"][0] = "+to_string(pe[l][0])
+                                +"\n    pe["+to_string(l)+"][1] = "+to_string(pe[l][1])
+                                +"\n    pe["+to_string(l)+"][2] = "+to_string(pe[l][2])
+                                +"\n    pe[" +to_string(m)+"][0] = "+to_string(pe[m][0])
+                                +"\n    pe[" +to_string(m)+"][1] = "+to_string(pe[m][1])
+                                +"\n    pe[" +to_string(m)+"][2] = "+to_string(pe[m][2])
                                 +"\n    i = "+to_string(i)
                                 +"\n    j = "+to_string(j)
-                                +"\n    k = "+to_string(k);
+                                +"\n    k = "+to_string(k)
+                                +"\n    x = "+to_string(domainShiftX + dx*i)
+                                +"\n    y = "+to_string(domainShiftY + dy*j)
+                                +"\n    z = "+to_string(domainShiftZ + dz*k)
+                                +"\n    domainShiftX = "+to_string(domainShiftX)
+                                +"\n    domainShiftY = "+to_string(domainShiftY)
+                                +"\n    domainShiftZ = "+to_string(domainShiftZ)
+                                +"\n    ==========================================";
+                            
                                 logger->writeMsg(err.c_str(), CRITICAL);
                         }
-#endif
+                    #endif
                     }
                 }
                 
                 h = 0;
-                for (l = 0; l < 3; l++) {
-                    for (m = l; m < 3; m++) {
+                for( l = 0; l < 3; l++ ){
+                    for( m = l; m < 3; m++ ){
                         pDrive[ijkG2*6+h] = dTerms[l][m];
                         h++;
                     }
@@ -1008,7 +1156,7 @@ void ClosureManager::setDriver(int phase){
     
     switch (phase) {
         case PREDICTOR:
-            for(ijkG2=0; ijkG2<nG2; ijkG2++){
+            for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
                 for (h = 0; h < 6; h++) {
                     driverNext[6*ijkG2+h] = -driverNext[6*ijkG2+h]+2.0*pDrive[ijkG2*6+h];
                     gridMgr->setVectorVariableForNodeG2(ijkG2, DRIVER    , h, driverNext[ijkG2*6+h]);
@@ -1017,10 +1165,11 @@ void ClosureManager::setDriver(int phase){
             }
             gridMgr->sendBoundary2Neighbor(DRIVER_AUX);
             gridMgr->applyBC(DRIVER_AUX);
+            
             break;
         case CORRECTOR:
-            for(ijkG2=0; ijkG2<nG2; ijkG2++){
-                for (h = 0; h < 6; h++) {
+            for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+                for( h = 0; h < 6; h++ ){
                     driverNext[6*ijkG2+h] = 0.5*(pDrive[ijkG2*6+h]+driveaux[ijkG2]->getValue()[h]);
                     gridMgr->setVectorVariableForNodeG2(ijkG2, DRIVER, h, driverNext[ijkG2*6+h]);
                 }
@@ -1089,11 +1238,12 @@ void ClosureManager::gradients(double pe[3][3], double nabV[3][3],
     
     const double k1 = 0.250;// 1/4
     const double k2 = 0.0625;// 1/16
+    
     int idxRight, idxLeft;
     
     /* __  nabla V centered in space __ */
-    for (l = 0; l < 3; l++) {//d{x,y,z}
-        for (m = 0; m < 3; m++) {//Vele{x,y,z}
+    for( l = 0; l < 3; l++ ){//d{x,y,z}
+        for( m = 0; m < 3; m++ ){//Vele{x,y,z}
             
             idxRight = IDX(idx3D[0]+zeroOrderNeighb[2*l+1][0],
                            idx3D[1]+zeroOrderNeighb[2*l+1][1],
@@ -1109,7 +1259,7 @@ void ClosureManager::gradients(double pe[3][3], double nabV[3][3],
 
             nabV[l][m] = k1*(electrnVel[3*idxRight+m] - electrnVel[3*idxLeft+m]);
             
-            for (int pairNum = 0; pairNum<4; pairNum++){
+            for( int pairNum = 0; pairNum < 4; pairNum++ ){
                 idxRight = IDX(idx3D[0]+firstOrderNeighb[8*l+2*pairNum+1][0],
                                idx3D[1]+firstOrderNeighb[8*l+2*pairNum+1][1],
                                idx3D[2]+firstOrderNeighb[8*l+2*pairNum+1][2],
@@ -1119,11 +1269,12 @@ void ClosureManager::gradients(double pe[3][3], double nabV[3][3],
                                idx3D[1]+firstOrderNeighb[8*l+2*pairNum+0][1],
                                idx3D[2]+firstOrderNeighb[8*l+2*pairNum+0][2],
                                xResG2,yResG2,zResG2);
-                
+                //have to keep second order because of hedp applications
+                // where too hot plasma oscillations lead to cross derivatives (dxVy, dyVx, ...) overestimation
+                // and negative temperature as result
                 nabV[l][m] += k2*(electrnVel[3*idxRight+m] - electrnVel[3*idxLeft+m]);
             }
             
-        
             nabV[l][m] = nabV[l][m]/dl[l];
 
         }
@@ -1132,7 +1283,7 @@ void ClosureManager::gradients(double pe[3][3], double nabV[3][3],
     ijkG2 = IDX(idx3D[0], idx3D[1], idx3D[2], xResG2, yResG2, zResG2);
     
     /* __ upwind coefficients defined by flow direction __ */
-    for (l = 0; l < 3; l++) {//Vele{x,y,z}
+    for( l = 0; l < 3; l++ ){//Vele{x,y,z}
   
         sign = copysignf(1, electrnVel[3*ijkG2+l]);
         upwindIDX[l][0] = +0.5*(1.0-sign)/dl[l]; //sign=-1 - counterflow direction use (Pi-1 - Pi)
@@ -1143,20 +1294,19 @@ void ClosureManager::gradients(double pe[3][3], double nabV[3][3],
 
     h = 0;
     /* __  nabla P upwind scheme __ */
-    for (l = 0; l < 3; l++) {
-        for (m = l; m < 3; m++) {
+    for( l = 0; l < 3; l++ ){
+        for( m = l; m < 3; m++ ){
             
             pe[l][m] = pressuNext[6*ijkG2+h];
             pe[m][l] = pe[l][m];
             
-            for (s = 0; s < 3; s++) {//d{x,y,z}
+            for( s = 0; s < 3; s++ ){//d{x,y,z}
                 nabP[s][l][m] = upwindIDX[s][0]*pressuNext[6*diffIDX[s][0]+h]
                                +upwindIDX[s][1]*pe[l][m]
                                +upwindIDX[s][2]*pressuNext[6*diffIDX[s][1]+h];
                 
                 nabP[s][m][l] = nabP[s][l][m];// by Pij symmetry
             }
-            
             h++;
         }
     }

@@ -55,7 +55,7 @@ int Solver::solve(int i_time)
 }
 
 void Solver::performCalculation(int PHASE, int i_time){
-    logger->writeMsg("[Solver] performCaclculation...", DEBUG);
+    logger->writeMsg("[Solver] in performCalculation()...", DEBUG);
     
     pusher->push(PHASE, i_time);
     
@@ -78,6 +78,8 @@ void Solver::performCalculation(int PHASE, int i_time){
 
     emMng->calculateBnext();
     emMng->calculateJnext();
+    
+//    if (PHASE == CORRECTOR) pusher->checkEnergyBalance(i_time);
     
     logger->writeMsg("[Solver] performCaclculation...OK", DEBUG);
 }

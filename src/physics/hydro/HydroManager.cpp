@@ -7,7 +7,7 @@ using namespace chrono;
 HydroManager::HydroManager(shared_ptr<Loader> ldr,
                            shared_ptr<GridManager> gridMnr,
                            shared_ptr<Pusher> pshr):loader(move(ldr)),
-                            gridMgr(move(gridMnr)), pusher(move(pshr)){
+                           gridMgr(move(gridMnr)), pusher(move(pshr)){
                                 
     logger.reset(new Logger());
     initialize();
@@ -17,7 +17,6 @@ HydroManager::HydroManager(shared_ptr<Loader> ldr,
 void HydroManager::initialize(){
     gatherMoments(PREDICTOR);
     gatherMoments(CORRECTOR);
-    
 }
 
 
@@ -29,8 +28,12 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
     
     int totalPrtclNumber = pusher->getTotalParticleNumber();
     
+    string msg1 ="[HydroManager] totalPrtclNumber = "+to_string(totalPrtclNumber);
+    logger->writeMsg(msg1.c_str(), DEBUG);
+    
+    
     int posShift = 0, velShift = 0;
-    if(phase == CORRECTOR){
+    if( phase == CORRECTOR ){
         posShift = 3;
         velShift = 3;
     }
@@ -61,8 +64,8 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
     double* weights          = new double[G2nodesNumber*numOfSpecies];
     double* velocityWeighted = new double[G2nodesNumber*numOfSpecies*3];
     
-    for( idx=0; idx < G2nodesNumber; idx++){
-        for( spn=0; spn < numOfSpecies; spn++){
+    for( idx=0; idx < G2nodesNumber; idx++ ){
+        for( spn=0; spn < numOfSpecies; spn++ ){
             weights[numOfSpecies*idx+spn] = 0.0;
             for( coord=0; coord < 3; coord++){
                 velocityWeighted[(numOfSpecies*idx+spn)*3+coord] = 0.0;
@@ -94,15 +97,15 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
     double* vel;
     int type;
     
-    for( idx=0; idx < totalPrtclNumber; idx++){
+    for( idx=0; idx < totalPrtclNumber; idx++ ){
         
         pos  = particles[idx]->getPosition();
         vel  = particles[idx]->getVelocity();
         type = particles[idx]->getType();
         
-        x  = 0.5*(pos[0]+pos[3]);
-        y  = 0.5*(pos[1]+pos[4]);
-        z  = 0.5*(pos[2]+pos[5]);
+        x = 0.5*(pos[0]+pos[3]);
+        y = 0.5*(pos[1]+pos[4]);
+        z = 0.5*(pos[2]+pos[5]);
         
         x = (x - domainShiftX)/dx+G2shift;
         y = (y - domainShiftY)/dy+G2shift;
@@ -119,17 +122,19 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
         double gammas[8] = {1.0-gamma0, 1.0-gamma0, 1.0-gamma0, 1.0-gamma0,
                             gamma0    , gamma0    , gamma0    , gamma0};
         
-        x  = pos[0+posShift];
-        y  = pos[1+posShift];
-        z  = pos[2+posShift];
+        x = pos[0+posShift];
+        y = pos[1+posShift];
+        z = pos[2+posShift];
         
-        i  = int((x - domainShiftX)/dx+G2shift);// G2 index
-        j  = int((y - domainShiftY)/dy+G2shift);
-        k  = int((z - domainShiftZ)/dz+G2shift);
+        i = int((x - domainShiftX)/dx+G2shift);// G2 index
+        j = int((y - domainShiftY)/dy+G2shift);
+        k = int((z - domainShiftZ)/dz+G2shift);
         
         
-#ifdef LOG
-        if ( i < 0 || j < 0 || k < 0 || i >= xSizeG2 || j  >= ySizeG2|| k  >= zSizeG2){
+        idxG2 = IDX(i ,j ,k, xSizeG2, ySizeG2, zSizeG2);
+                
+        #ifdef HEAVYLOG
+        if( i < 0 || j < 0 || k < 0 || i >= xSizeG2 || j  >= ySizeG2|| k  >= zSizeG2 ){
             string msg1 ="[HydroManager] i = "+to_string(i)+" j = "+to_string(j)+" k = "+to_string(k)
             +"\n        xSizeG2 = "+to_string(xSizeG2)+" ySizeG2 = "+to_string(ySizeG2)
             +" zSizeG2 = "+to_string(zSizeG2)
@@ -142,87 +147,38 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
             logger->writeMsg(msg1.c_str(), DEBUG);
             continue;
         }
-#endif
+        #endif
         
-            switch (loader->dim) {
-                case 1:
-                        for (int neigh_num=0; neigh_num < 2; neigh_num++){
-                        
-                            idx_x = i + neighbourhood[neigh_num][0];
-                            
-                            idxG2 = IDX(idx_x ,j ,k, xSizeG2, ySizeG2, zSizeG2);
-                        
-                            alpha = alphas[neigh_num];
-
-                            weight = alpha;
-                        
-                            weights[numOfSpecies*idxG2+type] += weight;
-                        
-                            for( coord=0; coord < 3; coord++){
-                                velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
-                                += weight*vel[coord+velShift];
-                            }
-                        }
-                    break;
-                case 2:
-                        for (int neigh_num=0; neigh_num < 4; neigh_num++){
-                        
-                            idx_x = i + neighbourhood[neigh_num][0];
-                            idx_y = j + neighbourhood[neigh_num][1];
-                            
-                            idxG2 = IDX(idx_x ,idx_y ,k, xSizeG2, ySizeG2, zSizeG2);
-                        
-                            alpha = alphas[neigh_num];
-                            betta = bettas[neigh_num];
-                        
-                            weight = alpha*betta;
-                        
-                            weights[numOfSpecies*idxG2+type] += weight;
-                        
-                            for( coord=0; coord < 3; coord++){
-                                velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
-                                += weight*vel[coord+velShift];
-                            }
-                        }
-                        break;
-                case 3:
-                            for (int neigh_num=0; neigh_num < 8; neigh_num++){
-                                
-                                idx_x = i + neighbourhood[neigh_num][0];
-                                idx_y = j + neighbourhood[neigh_num][1];
-                                idx_z = k + neighbourhood[neigh_num][2];
-                                
-                                idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
-                                
-                                alpha = alphas[neigh_num];
-                                betta = bettas[neigh_num];
-                                gamma = gammas[neigh_num];
-                                
-                                weight = alpha*betta*gamma;
-                                
-                                weights[numOfSpecies*idxG2+type] += weight;
-                                
-                                for( coord=0; coord < 3; coord++){
-                                    velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
-                                    += weight*vel[coord+velShift];
-                                }
-                            }
-                    break;
-                    
-                default:
-                    throw runtime_error("dimension is not 1/2/3");
-            }
-            
- 
+         for( int neigh_num = 0; neigh_num < 8; neigh_num++ ){
+             
+             idx_x = i + neighbourhood[neigh_num][0];
+             idx_y = j + neighbourhood[neigh_num][1];
+             idx_z = k + neighbourhood[neigh_num][2];
+             
+             idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
+             
+             alpha = alphas[neigh_num];
+             betta = bettas[neigh_num];
+             gamma = gammas[neigh_num];
+             
+             weight = alpha*betta*gamma;
+             
+             weights[numOfSpecies*idxG2+type] += weight;
+             
+             for( coord = 0; coord < 3; coord++ ){
+                 velocityWeighted[(numOfSpecies*idxG2+type)*3+coord]
+                 += weight*vel[coord+velShift];
+             }
+         }
     }
     
-    for( spn=0; spn < numOfSpecies; spn++){
-        for( idx=0; idx < G2nodesNumber; idx++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
+        for( idx = 0; idx < G2nodesNumber; idx++ ){
             
             gridMgr->setVectorVariableForNodeG2(idx, gridMgr->DENS_VEL(spn), 0,
                                                 weights[numOfSpecies*idx+spn]);
             
-            for( coord=0; coord < 3; coord++){
+            for( coord = 0; coord < 3; coord++ ){
                 gridMgr->setVectorVariableForNodeG2(idx, gridMgr->DENS_VEL(spn), 1+coord,
                                                     velocityWeighted[(numOfSpecies*idx+spn)*3+coord]);
             }
@@ -240,6 +196,9 @@ void HydroManager::calculateAvgFluidVelocity4AllSpiecies(int phase){
 void HydroManager::gatherMoments(int phase){
     
     auto start_time = high_resolution_clock::now();
+    
+    string msg0 ="[HydroManager] start to gather moments ";
+    logger->writeMsg(msg0.c_str(), DEBUG);
     
     calculateAvgFluidVelocity4AllSpiecies(phase);
     
@@ -261,7 +220,7 @@ void HydroManager::gatherMoments(int phase){
     
     map<int, VectorVar**> dens_vel, dens_aux;
     
-    for(spn = 0; spn<numOfSpecies;spn++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
             dens_vel[spn] = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(spn));
             dens_aux[spn] = gridMgr->getVectorVariableOnG2(gridMgr->DENS_AUX(spn));
     }
@@ -269,20 +228,21 @@ void HydroManager::gatherMoments(int phase){
     double* densOfIons = new double[numOfSpecies*G2nodesNumber];
     
     double vel;
-    int ch = 0;
-    for( idx=0; idx < G2nodesNumber; idx++){
-        for(spn = 0; spn<numOfSpecies;spn++){
+    
+    for( idx=0; idx < G2nodesNumber; idx++ ){
+        for( spn = 0; spn < numOfSpecies; spn++ ){
+            
             pw = pusher->getParticleWeight4Type(spn);
     
-            normPtcl =  dens_vel[spn][idx]->getValue()[0];
+            normPtcl = dens_vel[spn][idx]->getValue()[0];
             
-            if(normPtcl < EPS8){
-                for( coord=0; coord < 3; coord++){
+            if( normPtcl < EPS8 ){
+                for( coord = 0; coord < 3; coord++ ){
                     vel = 0.0;
                     gridMgr->setVectorVariableForNodeG2(idx, gridMgr->DENS_VEL(spn), 1+coord, vel);
                 }
             }else{
-                for( coord=0; coord < 3; coord++){
+                for( coord = 0; coord < 3; coord++ ){
                     vel = dens_vel[spn][idx]->getValue()[1+coord]/normPtcl;
                     gridMgr->setVectorVariableForNodeG2(idx, gridMgr->DENS_VEL(spn), 1+coord, vel);
                 }
@@ -298,54 +258,52 @@ void HydroManager::gatherMoments(int phase){
     }
     
     double avg = 0;
-    for(spn = 0; spn<numOfSpecies;spn++){
-        for( idx=0; idx < G2nodesNumber; idx++){
+    for( spn = 0; spn < numOfSpecies; spn++ ){
+        for( idx = 0; idx < G2nodesNumber; idx++ ){
             avg = 0.5*(dens_vel[spn][idx]->getValue()[0]+dens_aux[spn][idx]->getValue()[0]);
             densOfIons[numOfSpecies*idx+spn] = avg;
         }
     }
-    
 
-    if (phase == PREDICTOR){
-        for(spn = 0; spn<numOfSpecies;spn++){
+    if( phase == PREDICTOR ){
+        for( spn = 0; spn < numOfSpecies; spn++ ){
             int dens2up  = gridMgr->DENS_AUX(spn);
-            for( idx=0; idx < G2nodesNumber; idx++){
+            for( idx = 0; idx < G2nodesNumber; idx++ ){
                 gridMgr->setVectorVariableForNodeG2(idx, dens2up, 0, dens_vel[spn][idx]->getValue()[0]);
             }
         }
     }
-
     
     double* densEle  = new double[G2nodesNumber];
     double* fluidVel = new double[3*G2nodesNumber];
     
-    for( idx=0; idx < G2nodesNumber; idx++){
+    for( idx = 0; idx < G2nodesNumber; idx++ ){
         densEle[idx] = 0.0;
-        for( coord=0; coord < 3; coord++){
+        for( coord = 0; coord < 3; coord++ ){
             fluidVel[3*idx+coord] = 0.0;
         }
     }
 
     double prtclCharge;
-    for( idx=0; idx < G2nodesNumber; idx++){
-        for(spn = 0; spn<numOfSpecies;spn++){
+    for( idx = 0; idx < G2nodesNumber; idx++ ){
+        for( spn = 0; spn < numOfSpecies; spn++ ){
             prtclCharge = pusher->getParticleCharge4Type(spn);
             densEle[idx] += densOfIons[numOfSpecies*idx+spn]*prtclCharge;
         }
         gridMgr->setVectorVariableForNodeG2(idx, DENSELEC, 0, densEle[idx]);
     }
     
-    for( idx=0; idx < G2nodesNumber; idx++){
-        for(spn = 0; spn<numOfSpecies;spn++){
+    for( idx = 0; idx < G2nodesNumber; idx++ ){
+        for( spn = 0; spn < numOfSpecies; spn++ ){
             prtclCharge = pusher->getParticleCharge4Type(spn);
             double densEleRevert = densEle[idx] < EPS8 ? 0.0 : 1.0/densEle[idx];
             double ionDens = densOfIons[numOfSpecies*idx+spn];
-            for( coord=0; coord < 3; coord++){
+            for( coord = 0; coord < 3; coord++ ){
                 vel = dens_vel[spn][idx]->getValue()[1+coord];
                 fluidVel[3*idx+coord] += ionDens*vel*prtclCharge*densEleRevert;
             }
         }
-        for( coord=0; coord < 3; coord++){
+        for( coord = 0; coord < 3; coord++ ){
             gridMgr->setVectorVariableForNodeG2(idx, VELOCION, coord, fluidVel[3*idx+coord]);
         }
     }
@@ -353,7 +311,6 @@ void HydroManager::gatherMoments(int phase){
     gridMgr->smoothDensAndIonVel();
     gridMgr->applyBC(DENSELEC);
     gridMgr->applyBC(VELOCION);
-
     
     delete [] densOfIons;
     delete [] densEle;
@@ -365,4 +322,3 @@ void HydroManager::gatherMoments(int phase){
     logger->writeMsg(msg.c_str(), DEBUG);
     
 }
-

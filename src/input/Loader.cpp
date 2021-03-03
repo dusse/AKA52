@@ -32,12 +32,23 @@ const string  GET_MIN_DENS_4_PPC = "getMinimumDens2ResolvePPC";
 const string  GET_FIELD_BC_TYPE = "getFieldBCType";
 const string  GET_PARTCL_BC_TYPE = "getParticleBCType";
 
+const string  GET_DAMPING_BOUNDARY_WIDTH  = "getDampingBoundaryWidth";
+
+const string  LEFT  = "left";
+const string  RIGHT  = "right";
+
 const string  GET_RUN_TYPE = "getRunType";
 const string  GET_INPUT_FILE = "getInputFile";
 
+
 const string  GET_HYPERVISCOSITY = "getHyperviscosity";
+const string  GET_BFIELD_LIMIT    = "getBfieldLimit";
+
 const string  GET_ELECTRON_MASS  = "getElectronMass";
-const string  GET_RELAX_FACTOR  = "getRelaxFactor";
+const string  GET_RELAX_FACTOR   = "getRelaxFactor";
+
+const string  GET_CELL_BREAKDOWN_EFIELD_FACTOR  = "getCellBreakdownEfieldFactor";
+const string  GET_CRITICAL_PRESSURE   = "getCriticalPressure";
 
 const string  NUMBER_OF_LASER_SPOTS = "getNumberOfLaserSpots";
 
@@ -93,7 +104,25 @@ void Loader::load()
                     throw runtime_error("no such particle BC!");
             }
             
-
+            string right_damping = GET_DAMPING_BOUNDARY_WIDTH + dirs[n] + RIGHT;
+            string left_damping  = GET_DAMPING_BOUNDARY_WIDTH + dirs[n] + LEFT;
+            
+            this->dampingBoundaryWidth[n][0] = 0.0;
+            this->dampingBoundaryWidth[n][1] = 0.0;
+            
+            auto calldampingBoundaryWidthMethod = PyObject_CallMethod(pInstance, strdup(left_damping.c_str()),
+                                                                      strdup(BRACKETS.c_str()));
+            
+            if( calldampingBoundaryWidthMethod != NULL ){
+                this->dampingBoundaryWidth[n][0] = PyFloat_AsDouble(calldampingBoundaryWidthMethod);
+            }
+            
+            calldampingBoundaryWidthMethod = PyObject_CallMethod(pInstance, strdup(right_damping.c_str()),
+                                                                 strdup(BRACKETS.c_str()));
+            
+            if( calldampingBoundaryWidthMethod != NULL ){
+                this->dampingBoundaryWidth[n][1] = PyFloat_AsDouble(calldampingBoundaryWidthMethod);
+            }
             
         }
     
@@ -110,7 +139,35 @@ void Loader::load()
         logger.writeMsg(importantmsg00.c_str(), INFO);
 
     
+        if( this->BCtype[0] ==  DAMPING ){
+            string dampingBCmsg = "[Loader] [BC - X] damping layer width: left = "
+                                +to_string( this->dampingBoundaryWidth[0][0] )
+                                +" / right = "+to_string(this->dampingBoundaryWidth[0][1] );
+            logger.writeMsg(dampingBCmsg.c_str(), INFO);
+        }else{
+            this->dampingBoundaryWidth[0][0] = 0.0;
+            this->dampingBoundaryWidth[0][1] = 0.0;
+        }
     
+        if( this->BCtype[1] ==  DAMPING ){
+            string dampingBCmsg = "[Loader] [BC - Y] damping layer width: left = "
+                                +to_string( this->dampingBoundaryWidth[1][0] )
+                                +" / right = "+to_string(this->dampingBoundaryWidth[1][1] );
+            logger.writeMsg(dampingBCmsg.c_str(), INFO);
+        }else{
+            this->dampingBoundaryWidth[1][0] = 0.0;
+            this->dampingBoundaryWidth[1][1] = 0.0;
+        }
+    
+        if( this->BCtype[2] ==  DAMPING ){
+            string dampingBCmsg = "[Loader] [BC - Z] damping layer width: left = "
+                                +to_string( this->dampingBoundaryWidth[2][0] )
+                                +" / right = "+to_string(this->dampingBoundaryWidth[2][1] );
+            logger.writeMsg(dampingBCmsg.c_str(), INFO);
+        }else{
+            this->dampingBoundaryWidth[2][0] = 0.0;
+            this->dampingBoundaryWidth[2][1] = 0.0;
+        }
   
     
     
@@ -142,20 +199,20 @@ void Loader::load()
     
 
     
-        for(int i = 0; i < 3; i++){
+        for( int i = 0; i < 3; i++ ){
             this->mpiCoords[i] = cs[i];
-            this->BCtype[i] = BCtype[i] == 1 ? PERIODIC : IDEAL;
+            this->BCtype[i] = BCtype[i] == 1 ? PERIODIC : DAMPING;
         }
         int neighborRank;
 
-        for(int i = 0; i < 27; i++){
+        for( int i = 0; i < 27; i++ ){
             this->neighbors2Send.push_back(MPI_PROC_NULL);
             this->neighbors2Recv.push_back(MPI_PROC_NULL);
         }
     
-        for (int a = -1; a <= +1; a++){
-            for (int b = -1; b <= +1; b++){
-                for (int c = -1; c <= +1; c++){
+        for( int a = -1; a <= +1; a++ ){
+            for( int b = -1; b <= +1; b++ ){
+                for( int c = -1; c <= +1; c++ ){
                     
                     //-1 -> left, bottom, back
                     // 0 -> same position
@@ -203,10 +260,10 @@ void Loader::load()
 
 
         double boxSizePerDomain[3];
-        for (int n=0; n<3; n++){
+        for( int n = 0; n < 3; n++ ){
         
             string res = GET + dirs[n] + "resolution";
-            string right_str= GET + dirs[n] + "right";
+            string right_str= GET + dirs[n] + RIGHT;
             this->boxCoordinates[n][0] = 0.0; //origin point (0,0,0) is left lower corner i=0 j=0 k=0
             this->boxCoordinates[n][1] = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
                                                                               strdup(right_str.c_str()),
@@ -214,7 +271,7 @@ void Loader::load()
             this->boxSizes[n] = boxCoordinates[n][1];
             //  length of the box in normalized units
             
-            if(boxSizes[n] <= 0.0){
+            if( boxSizes[n] <= 0.0 ){
                 throw runtime_error("box has zero length!");
             }
             
@@ -223,7 +280,7 @@ void Loader::load()
                                                                                   strdup(res.c_str()),
                                                                                   strdup(BRACKETS.c_str())));
             
-            if (totPixelsPerBoxSide[n] == 1){
+            if( totPixelsPerBoxSide[n] == 1 ){
                 // length per pixel equals to total size
                 this->spatialSteps[n]=boxSizes[n];
             }else{
@@ -238,20 +295,19 @@ void Loader::load()
             
             this->offsetInPixels[n] = 0;
             
-            if(delta == 0.0){
+            if ( delta == 0.0 ){
                 //  length of the domain in normalized units
-                boxSizePerDomain[n]  = resolution[n]*spatialSteps[n];
-                this->offsetInPixels[n]    = resolution[n]*cs[n];// global offset in pixels
+                boxSizePerDomain[n]     = resolution[n]*spatialSteps[n];
+                this->offsetInPixels[n] = resolution[n]*cs[n];// global offset in pixels
                 
-            }else if(cs[n] < delta){
-                
+            } else if ( cs[n] < delta ){
                 this->resolution[n] += 1;
                 
-                boxSizePerDomain[n]  = resolution[n]*spatialSteps[n];
-                this->offsetInPixels[n]    = resolution[n]*cs[n];
+                boxSizePerDomain[n]     = resolution[n]*spatialSteps[n];
+                this->offsetInPixels[n] = resolution[n]*cs[n];
                 
             } else {
-                boxSizePerDomain[n] = resolution[n]*spatialSteps[n];
+                boxSizePerDomain[n]     = resolution[n]*spatialSteps[n];
                 this->offsetInPixels[n] = (resolution[n]+1)*delta + resolution[n]*(cs[n]-delta);
             }
             
@@ -264,19 +320,18 @@ void Loader::load()
             +"\n"+string( 10, ' ' )+" boxCoordinates["+to_string(n)+"][0] = "+to_string(boxCoordinates[n][0])
             +"\n"+string( 10, ' ' )+" boxCoordinates["+to_string(n)+"][1] = "+to_string(boxCoordinates[n][1]);
             logger.writeMsg(msgs.c_str(), INFO);
-        
+
     }
-    if(boxSizes[0] != 1 && boxSizes[1] != 1 && boxSizes[2] != 1 ){
+    
+    
+    if( boxSizes[0] != 1 && boxSizes[1] != 1 && boxSizes[2] != 1 ){
         this->dim = 3;
-    }else if(boxSizes[0] != 1 && boxSizes[1] != 1 ){
+    } else if( boxSizes[0] != 1 && boxSizes[1] != 1 ){
         this->dim = 2;
-    }else if(boxSizes[0] != 1 ){
+    } else if( boxSizes[0] != 1 ){
         this->dim = 1;
     }
     
-    if(boxSizes[0] != 1 && boxSizes[1] != 1 && boxSizes[2] != 1 ){
-        this->dim = 3;
-    }
     
     this->timeStep           = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
                                                           strdup(GET_TIMESTEP.c_str()),
@@ -315,6 +370,12 @@ void Loader::load()
                                                                   strdup(GET_HYPERVISCOSITY.c_str()),
                                                                   strdup(BRACKETS.c_str())));
     
+    
+    auto callMethod = PyObject_CallMethod(pInstance,
+                                          strdup(GET_CELL_BREAKDOWN_EFIELD_FACTOR.c_str()),
+                                          strdup(BRACKETS.c_str()));
+    
+    
     this->electronmass       = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
                                                                     strdup(GET_ELECTRON_MASS.c_str()),
                                                                     strdup(BRACKETS.c_str())));
@@ -332,11 +393,14 @@ void Loader::load()
                                                             strdup(NUMBER_OF_LASER_SPOTS.c_str()),
                                                             strdup(BRACKETS.c_str())));
     
-    if(numOfSpots>0){
+    if( numOfSpots > 0 ){
         
         this->prtclType2Load = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
                                                                    strdup(PARTICLE_TYPE2LOAD.c_str()),
                                                                    strdup(BRACKETS.c_str())))-1;
+        if( prtclType2Load > (numOfSpecies-1) ){
+            throw runtime_error("no such particle type for loading!");
+        }
         // -1 because in input count starts in human manner from 1
         
         this->prtclTemp2Load = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
@@ -348,10 +412,37 @@ void Loader::load()
                                                                     strdup(BRACKETS.c_str())));
         this->laserPulseDuration_tsnum = (int) PyFloat_AsDouble(PyObject_CallMethod(pInstance,
                                                                                     strdup(GET_LASER_PULSE_DURATION.c_str()),
-                                                                                    strdup(BRACKETS.c_str())));    }
+                                                                                    strdup(BRACKETS.c_str())));
+    
+    }
+
+    if( callMethod != NULL ){
+        this->cellBreakdownEfieldFactor = PyFloat_AsDouble(callMethod);
+        string fctrMsg = "[Loader] [STABILITY] cell breakdown E-field factor = "+to_string(cellBreakdownEfieldFactor);
+        logger.writeMsg(fctrMsg.c_str(), INFO);
+    }else{
+        this->cellBreakdownEfieldFactor = 0.005;
+        string fctrMsg = "[Loader] [STABILITY] cellBreakdownEfieldFactor = "+to_string(cellBreakdownEfieldFactor)+" (default)";
+        logger.writeMsg(fctrMsg.c_str(), INFO);
+        
+    }
+    
+    callMethod = PyObject_CallMethod(pInstance,
+                                     strdup(GET_CRITICAL_PRESSURE.c_str()),
+                                     strdup(BRACKETS.c_str()));
+    
+    if( callMethod != NULL ){
+        this->criticalPressure = PyFloat_AsDouble(callMethod);
+        string presMsg = "[Loader] [STABILITY] critical pressure = "+to_string(criticalPressure);
+        logger.writeMsg(presMsg.c_str(), INFO);
+    }else{
+        this->criticalPressure = 500.0;
+        string presMsg = "[Loader] [STABILITY] critical pressure = "+to_string(criticalPressure)+" (default)";
+        logger.writeMsg(presMsg.c_str(), INFO);
+    }
 
     
-    if(rank == 0){
+    if( rank == 0 ){
 
         string msg = runType == 0 ? "scratch" : "restart";
         msg = "[Loader] [COMMON] run from "+msg+" "+to_string(dim)+"D simulation";
@@ -360,14 +451,14 @@ void Loader::load()
         msg = "[Loader] [COMMON]  Box size:";
         logger.writeMsg(msg.c_str(), INFO);
 
-        for (int n=0; n<3; n++){
-                   char buf[100];
-                   snprintf(buf, sizeof(buf),
-                            "[Loader] [COMMON] [%s] [%1.5f, %1.5f] res = %3i => step  = %1.6f",
-                   dirs[n].c_str(), boxCoordinates[n][0],boxSizes[n],
-                   totPixelsPerBoxSide[n],spatialSteps[n]);
+        for( int n = 0; n < 3; n++ ){
+            char buf[100];
+            snprintf(buf, sizeof(buf),
+                    "[Loader] [COMMON] [%s] [%1.5f, %1.5f] res = %3i => step  = %1.6f",
+            dirs[n].c_str(), boxCoordinates[n][0],boxSizes[n],
+           totPixelsPerBoxSide[n],spatialSteps[n]);
             
-            
+           
             logger.writeMsg(buf, INFO);
         }
         msg = "[Loader] [COMMON] timeStep = "+to_string(timeStep);
@@ -389,7 +480,7 @@ void Loader::load()
         msg = "[Loader] [COMMON] minimum density resolved by ppc number = "+to_string(minimumDens2ResolvePPC);
         logger.writeMsg(msg.c_str(), INFO);
         
-        if(numOfSpots>0){
+        if( numOfSpots > 0 ){
             msg = "[Loader] [LASER] numOfSpots = "+to_string(numOfSpots)
                     +"; prtclType2Load = "+to_string(prtclType2Load+1)
                     +"; pressureIncreaseRate = "+to_string(pressureIncreaseRate);
@@ -403,8 +494,18 @@ void Loader::load()
         msg = "[Loader] [OHM's LAW]: hyperviscosity = "+to_string(hyperviscosity);
         logger.writeMsg(msg.c_str(), INFO);
         
-        msg = "[Loader] [PRESSURE]: electron mass = "+to_string(electronmass);
+        #ifdef USE_EDGE_FACTOR
+        msg = "[Loader] [OHM's LAW]: edge factor for ohm's law terms (pressure and hall) is ON";
         logger.writeMsg(msg.c_str(), INFO);
+        #endif
+        
+        #ifdef IMPLICIT_PRESSURE
+        msg = "[Loader] [PRESSURE]: you use implicit scheme ";
+        #else
+        msg = "[Loader] [PRESSURE]: you use explicit (subcycling) scheme (default)";
+        #endif
+        logger.writeMsg(msg.c_str(), INFO);
+        
 
         msg = "[Loader] [PRESSURE]: relaxation factor = "+to_string(relaxFactor);
         logger.writeMsg(msg.c_str(), INFO);
@@ -446,7 +547,7 @@ vector<double> Loader::getVelocity(double x, double y, double z,
     PyObject *pValue;
     vector<double> velocity;
     
-    for (int n=0; n<3; n++){
+    for( int n = 0; n < 3; n++ ){
         string varName =GET_VELOCITY+dirs[n]+SPIECIES+to_string(spieceiesType+1);
 
         pValue = PyObject_CallMethod(pInstance, strdup(varName.c_str()),
@@ -463,7 +564,7 @@ vector<double> Loader::getBfield(double x,double y,double z){
     PyObject *pValue;
     vector<double> bField;
     
-    for (int n=0; n<3; n++){
+    for( int n = 0; n < 3; n++ ){
         string varName =GET_BFIELD+dirs[n];
         
         pValue = PyObject_CallMethod(pInstance, strdup(varName.c_str()),
@@ -538,7 +639,7 @@ PyObject * Loader::getPythonClassInstance(string className){
     pName = PyString_FromString(className.c_str());
     
     pModule = PyImport_Import(pName);
-    if(pModule == NULL){
+    if( pModule == NULL ){
             logger.writeMsg("*****************************************************", CRITICAL);
             logger.writeMsg("****                                             ****", CRITICAL);
             logger.writeMsg("****  STOP SIMULATION!!!    INPUT FILE PROBLEM   ****", CRITICAL);
@@ -552,7 +653,7 @@ PyObject * Loader::getPythonClassInstance(string className){
     pDict = PyModule_GetDict(pModule);
     pClass = PyDict_GetItemString(pDict, className.c_str());
     
-    if (PyCallable_Check(pClass)){
+    if( PyCallable_Check(pClass) ){
         pInstance = PyObject_CallObject(pClass, NULL);
     }else{
         logger.writeMsg("[Loader] Cannot instantiate the Python class", CRITICAL);

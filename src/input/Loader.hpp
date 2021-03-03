@@ -18,7 +18,7 @@ enum RunType{
 };
 
 enum FieldBCtype{
-    IDEAL,
+    DAMPING,
     PERIODIC
 };
 
@@ -57,23 +57,31 @@ public:
     const int SIMULATION_SIZE = 3;
     int dim;
     double boxCoordinates[3][2];
+    
+    double dampingBoundaryWidth[3][2];
+    
     double boxSizes[3];
     double spatialSteps[3];
     
     double hyperviscosity;
-    
+
     double minimumDens2ResolvePPC;
     
     int smoothStride;
     double electronmass;
     double relaxFactor;
     
+    //stability parameters
+    double cellBreakdownEfieldFactor = 0.005;
+    double criticalPressure = 500.0;
+    
     //laser staff
-    int numOfSpots=0;
+    int numOfSpots = 0;
     int prtclType2Load;
     double prtclTemp2Load;
     double pressureIncreaseRate;
     int laserPulseDuration_tsnum;
+    double loadedEnergyPerStep = 0.0;
     
     //MPI staff
     std::vector<int> neighbors2Send;//27
