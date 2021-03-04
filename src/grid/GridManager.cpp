@@ -1353,7 +1353,7 @@ void GridManager::smooth(int varName){
     }
     
     
-    delete varValues;
+    delete [] varValues;
     auto end_time = high_resolution_clock::now();
     string msg ="[GridManager] smooth "+to_string(varName)
                 +" duration = "+to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
