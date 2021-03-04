@@ -6,6 +6,8 @@ Loader::Loader(){
     
 }
 
+/*#################################################################################################*/
+
 const char  *INIT_CLASS_NAME = "Initializer";
 const string  BRACKETS ="()";
 const string  BRACKETS_3DOUBLE = "(ddd)";
@@ -40,7 +42,6 @@ const string  RIGHT  = "right";
 const string  GET_RUN_TYPE = "getRunType";
 const string  GET_INPUT_FILE = "getInputFile";
 
-
 const string  GET_HYPERVISCOSITY = "getHyperviscosity";
 const string  GET_BFIELD_LIMIT    = "getBfieldLimit";
 
@@ -64,31 +65,172 @@ const string  GET_ELECTRON_PRESSURE2SUSTAIN  = "getElectronPressure2sustain";
 
 const string  dirs[] = {"X", "Y", "Z"};
 
-void Loader::load()
-{
-        MPI_Comm com;
+
+/*#################################################################################################*/
+
+PyObject * Loader::getPythonClassInstance(string className){
+    PyObject  *pName, *pModule, *pDict, *pClass, *pInstance;
+    string msg = "[Loader] Start to instantiate the Python class " + className;
+    logger.writeMsg(msg.c_str(), DEBUG);
+    
+    pName = PyString_FromString(className.c_str());
+    
+    pModule = PyImport_Import(pName);
+    if( pModule == NULL ){
+        logger.writeMsg("*****************************************************", CRITICAL);
+        logger.writeMsg("****                                             ****", CRITICAL);
+        logger.writeMsg("****  STOP SIMULATION!!!    INPUT FILE PROBLEM   ****", CRITICAL);
+        logger.writeMsg("****                                             ****", CRITICAL);
+        logger.writeMsg("****   try debug mode 'make -DLOG'               ****", CRITICAL);
+        logger.writeMsg("****   check indents in python input file        ****", CRITICAL);
+        logger.writeMsg("****   check python enviroment and imports       ****", CRITICAL);
+        logger.writeMsg("*****************************************************", CRITICAL);
+        exit(-1);
+    }
+    
+    pDict = PyModule_GetDict(pModule);
+    pClass = PyDict_GetItemString(pDict, className.c_str());
+    
+    if( PyCallable_Check(pClass) ){
+        pInstance = PyObject_CallObject(pClass, NULL);
+    }else{
+        logger.writeMsg("[Loader] Cannot instantiate the Python class", CRITICAL);
+        pInstance = nullptr;
+    }
+    
+    logger.writeMsg("[Loader] finish to instantiate the Python class ", DEBUG);
+    
+    return pInstance;
+}
+
+
+double Loader::callPyFloatFunction( PyObject* instance,
+                                    const string funcName,
+                                    const string brackets){
+
+        return PyFloat_AsDouble(getPyMethod(instance,funcName,brackets));
+}
+
+double Loader::callPyFloatFunctionWith3args( PyObject* instance,
+                                            const string funcName,
+                                            const string brackets,
+                                            double x,double y,double z){
+    
+    return PyFloat_AsDouble(PyObject_CallMethod(instance,strdup(funcName.c_str()),
+                                                strdup(brackets.c_str()),x,y,z));
+}
+
+long Loader::callPyLongFunction( PyObject* instance,
+                                const string funcName,
+                                const string brackets){
+    
+    return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
+}
+
+string Loader::callPyStringFunction( PyObject* instance,
+                               const string funcName,
+                               const string brackets){
+    
+    return PyString_AS_STRING(getPyMethod(instance,funcName,brackets));
+}
+
+
+PyObject* Loader::getPyMethod(PyObject* instance,
+                               const string funcName,
+                               const string brackets){
+    
+    return PyObject_CallMethod(instance, strdup(funcName.c_str()),
+                               strdup(brackets.c_str()));
+}
+
+/*#################################################################################################*/
+
+void Loader::initMPIcoordinatesOfDomains( int rank, int cs[3] ){
+    
+    int ss[3];
+    MPI_Comm com;
+    
+    MPI_Cart_create(MPI_COMM_WORLD, 3, this->mpiDomains, this->BCtype, 1, &com);
+    MPI_Cart_coords(com, rank, 3, cs);
+    
+    
+    for( int i = 0; i < 3; i++ ){
+        this->mpiCoords[i] = cs[i];
+        this->BCtype[i] = BCtype[i] == 1 ? PERIODIC : DAMPING;
+    }
+    int neighborRank;
+    
+    for( int i = 0; i < 27; i++ ){
+        this->neighbors2Send.push_back(MPI_PROC_NULL);
+        this->neighbors2Recv.push_back(MPI_PROC_NULL);
+    }
+    
+    //-1 -> left, bottom, back
+    // 0 -> same position
+    //+1 -> right, top, front
+    
+    for( int a = -1; a <= +1; a++ ){
+        for( int b = -1; b <= +1; b++ ){
+            for( int c = -1; c <= +1; c++ ){
+                
+                /* __ coordinate of the neighbor __ */
+                ss[0] = cs[0]+a;
+                ss[1] = cs[1]+b;
+                ss[2] = cs[2]+c;
+                
+                /* __ if coordinate out of range : no neighbor __ */
+                if ( (BCtype[0] != PERIODIC
+                      && (ss[0] < 0 || ss[0] >= mpiDomains[0]))
+                    || ( BCtype[1] != PERIODIC
+                        && (ss[1] < 0 || ss[1] >= mpiDomains[1]))
+                    || ( BCtype[2] != PERIODIC
+                        && (ss[2] < 0 || ss[2] >= mpiDomains[2]))){
+                        
+                        neighborRank = MPI_PROC_NULL;
+                        
+                        //  For a process group with cartesian structure,
+                        //  the function MPI_CART_RANK translates the logical
+                        //  process coordinates to process ranks as they are used
+                        //  by the point-to-point routines.
+                        //  For dimension i with periods(i) = true, if the coordinate,
+                        //  coords(i), is out of range, that is, coords(i) < 0 or coords(i) >= dims(i),
+                        //  it is shifted back to the interval 0 <= coords(i) < dims(i) automatically.
+                        //
+                        //  Out-of-range coordinates are erroneous for non-periodic dimensions.
+                        //  Versions of MPICH before 1.2.2 returned MPI_PROC_NULL for the rank in this case.
+                        
+                    }else{
+                        MPI_Cart_rank(com, ss, &neighborRank);
+                    }
+                
+                this->neighbors2Send[(1+c)+3*((1+b)+3*(1+a))] = neighborRank;
+                this->neighbors2Recv[(1-c)+3*((1-b)+3*(1-a))] = neighborRank;
+                
+            }
+        }
+    }
+}
+
+
+void Loader::load(){
+    
         int rank ;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        int cs[3];
-        int ss[3];
 
         Py_Initialize();
         this->pInstance = getPythonClassInstance(INIT_CLASS_NAME);
 
-
-        for (int n=0; n<3; n++){
-             string domainNum =GET+dirs[n]+GET_MPI_DOMAIN_NUM;
-             this->mpiDomains[n] = (int) PyInt_AsLong(PyObject_CallMethod(pInstance,
-                                                                           strdup(domainNum.c_str()),
-                                                                           strdup(BRACKETS.c_str())));
-            string bcType =GET_FIELD_BC_TYPE+dirs[n];
-            this->BCtype[n] = (int) PyInt_AsLong(PyObject_CallMethod(pInstance,
-                                                                         strdup(bcType.c_str()),
-                                                                         strdup(BRACKETS.c_str())));// 1 - periodic for MPI
-            string partclbcType =GET_PARTCL_BC_TYPE+dirs[n];
-            this->partclBCtype[n] = (int) PyInt_AsLong(PyObject_CallMethod(pInstance,
-                                                                 strdup(partclbcType.c_str()),
-                                                                 strdup(BRACKETS.c_str())));// 1 - periodic, 0 - outflow
+        for( int n = 0; n < 3; n++ ){
+            
+            string domainNum =GET+dirs[n]+GET_MPI_DOMAIN_NUM;
+            this->mpiDomains[n] = (int) callPyLongFunction( pInstance, domainNum, BRACKETS );
+            
+            string bcType =GET_FIELD_BC_TYPE+dirs[n];// 1 - periodic for MPI, 0 - damping layer for B and Pe
+            this->BCtype[n] = (int) callPyLongFunction( pInstance, bcType, BRACKETS);
+            
+            string partclbcType =GET_PARTCL_BC_TYPE+dirs[n];// 1 - periodic, 0 - outflow
+            this->partclBCtype[n] = (int) callPyLongFunction( pInstance, partclbcType, BRACKETS );
+            
             switch (partclBCtype[n]) {
                 case 0:
                     this->partclBCtype[n] = OUTFLOW_BC;
@@ -96,10 +238,6 @@ void Loader::load()
                 case 1:
                     this->partclBCtype[n] = PERIODIC_BC;
                     break;
-                case 2:
-                    this->partclBCtype[n] = REFLECT_BC;
-                    break;
-                    
                 default:
                     throw runtime_error("no such particle BC!");
             }
@@ -107,18 +245,13 @@ void Loader::load()
             string right_damping = GET_DAMPING_BOUNDARY_WIDTH + dirs[n] + RIGHT;
             string left_damping  = GET_DAMPING_BOUNDARY_WIDTH + dirs[n] + LEFT;
             
-            this->dampingBoundaryWidth[n][0] = 0.0;
-            this->dampingBoundaryWidth[n][1] = 0.0;
-            
-            auto calldampingBoundaryWidthMethod = PyObject_CallMethod(pInstance, strdup(left_damping.c_str()),
-                                                                      strdup(BRACKETS.c_str()));
+            PyObject* calldampingBoundaryWidthMethod = getPyMethod( pInstance, left_damping, BRACKETS );
             
             if( calldampingBoundaryWidthMethod != NULL ){
                 this->dampingBoundaryWidth[n][0] = PyFloat_AsDouble(calldampingBoundaryWidthMethod);
             }
             
-            calldampingBoundaryWidthMethod = PyObject_CallMethod(pInstance, strdup(right_damping.c_str()),
-                                                                 strdup(BRACKETS.c_str()));
+            calldampingBoundaryWidthMethod = getPyMethod( pInstance, right_damping, BRACKETS );
             
             if( calldampingBoundaryWidthMethod != NULL ){
                 this->dampingBoundaryWidth[n][1] = PyFloat_AsDouble(calldampingBoundaryWidthMethod);
@@ -126,17 +259,17 @@ void Loader::load()
             
         }
     
-        string importantmsg0 = "[Loader] [BC] partclBCtype[0] = "+to_string( partclBCtype[0] )
-                                    +" partclBCtype[1] = "+to_string(partclBCtype[1] )
-                                    +" partclBCtype[2] = "+to_string(partclBCtype[2] );
+        string pbcmsg = "[Loader] [BC] partclBCtype[0] = "+to_string(partclBCtype[0])
+                                    +" partclBCtype[1] = "+to_string(partclBCtype[1])
+                                    +" partclBCtype[2] = "+to_string(partclBCtype[2]);
     
-        logger.writeMsg(importantmsg0.c_str(), INFO);
+        logger.writeMsg(pbcmsg.c_str(), INFO);
     
-        string importantmsg00 = "[Loader] [BC] BCtype[0] = "+to_string( BCtype[0] )
-                                +" BCtype[1] = "+to_string(BCtype[1] )
-                                +" BCtype[2] = "+to_string(BCtype[2] );
+        string fbcmsg = "[Loader] [BC] BCtype[0] = "+to_string(BCtype[0])
+                                    +" BCtype[1] = "+to_string(BCtype[1])
+                                    +" BCtype[2] = "+to_string(BCtype[2]);
     
-        logger.writeMsg(importantmsg00.c_str(), INFO);
+        logger.writeMsg(fbcmsg.c_str(), INFO);
 
     
         if( this->BCtype[0] ==  DAMPING ){
@@ -171,103 +304,37 @@ void Loader::load()
   
     
     
-        this->runType = (int) PyInt_AsLong(PyObject_CallMethod(pInstance,
-                                                           strdup(GET_RUN_TYPE.c_str()),
-                                                           strdup(BRACKETS.c_str())));;
+        this->runType = (int) callPyLongFunction( pInstance, GET_RUN_TYPE, BRACKETS );
     
-        this->inputfile = PyString_AS_STRING(PyObject_CallMethod(pInstance,
-                                                             strdup(GET_INPUT_FILE.c_str()),
-                                                             strdup(BRACKETS.c_str())));;
+        this->inputfile =  callPyStringFunction( pInstance, GET_INPUT_FILE, BRACKETS );
     
-    int nprocs;
-    MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
+        int nprocs;
+        MPI_Comm_size(MPI_COMM_WORLD, &nprocs);
     
-    string importantmsg = "[Loader] [MPI] mpiDomain[0] (X) = "+to_string(mpiDomains[0])
-    +" mpiDomain[1] (Y) = "+to_string(mpiDomains[1])
-    +" mpiDomain[2] (Z) = "+to_string(mpiDomains[2]);
+        string mpimsg = "[Loader] [MPI] mpiDomain[0] (X) = "+to_string(mpiDomains[0])
+                                           +" mpiDomain[1] (Y) = "+to_string(mpiDomains[1])
+                                           +" mpiDomain[2] (Z) = "+to_string(mpiDomains[2]);
     
-    logger.writeMsg(importantmsg.c_str(), INFO);
+        logger.writeMsg(mpimsg.c_str(), INFO);
     
-    if( mpiDomains[0]*mpiDomains[1]*mpiDomains[2] != nprocs ){
-        string errmsg = "[Loader] [MPI] number of cores run with mpirun command  = "+to_string(nprocs);
-        logger.writeMsg(errmsg.c_str(), CRITICAL);
-        throw runtime_error("!!!number of requested cores must be equal to number of distributed cores!!!");
-    }
-    
-    MPI_Cart_create(MPI_COMM_WORLD, 3, mpiDomains, BCtype, 1, &com);
-    MPI_Cart_coords(com, rank, 3, cs);
-    
-
-    
-        for( int i = 0; i < 3; i++ ){
-            this->mpiCoords[i] = cs[i];
-            this->BCtype[i] = BCtype[i] == 1 ? PERIODIC : DAMPING;
-        }
-        int neighborRank;
-
-        for( int i = 0; i < 27; i++ ){
-            this->neighbors2Send.push_back(MPI_PROC_NULL);
-            this->neighbors2Recv.push_back(MPI_PROC_NULL);
+        if( mpiDomains[0]*mpiDomains[1]*mpiDomains[2] != nprocs ){
+            string errmsg = "[Loader] [MPI] number of cores run with mpirun command  = "+to_string(nprocs);
+            logger.writeMsg(errmsg.c_str(), CRITICAL);
+            throw runtime_error("!!!number of requested cores must be equal to number of distributed cores!!!");
         }
     
-        for( int a = -1; a <= +1; a++ ){
-            for( int b = -1; b <= +1; b++ ){
-                for( int c = -1; c <= +1; c++ ){
-                    
-                    //-1 -> left, bottom, back
-                    // 0 -> same position
-                    //+1 -> right, top, front
-                    
-                    /* __ guess the coordinate of the neighbor __ */
-                    ss[0] = cs[0]+a;
-                    ss[1] = cs[1]+b;
-                    ss[2] = cs[2]+c;
-                    
-                    
-                    /* __ if coordinate out of range : no neighbor __ */
-                    if ( (BCtype[0] != PERIODIC
-                              && (ss[0] < 0 || ss[0] >= mpiDomains[0]))
-                          || ( BCtype[1] != PERIODIC
-                              && (ss[1] < 0 || ss[1] >= mpiDomains[1]))
-                          || ( BCtype[2] != PERIODIC
-                              && (ss[2] < 0 || ss[2] >= mpiDomains[2]))){
-                          
-                          neighborRank = MPI_PROC_NULL;
-                              
-                        //  For a process group with cartesian structure,
-                        //  the function MPI_CART_RANK translates the logical
-                        //  process coordinates to process ranks as they are used
-                        //  by the point-to-point routines.
-                        //  For dimension i with periods(i) = true, if the coordinate,
-                        //  coords(i), is out of range, that is, coords(i) < 0 or coords(i) >= dims(i),
-                        //  it is shifted back to the interval 0 <= coords(i) < dims(i) automatically.
-                        //
-                        //  Out-of-range coordinates are erroneous for non-periodic dimensions.
-                        //  Versions of MPICH before 1.2.2 returned MPI_PROC_NULL for the rank in this case.
-                              
-                    }else{
-                          
-                          MPI_Cart_rank(com, ss, &neighborRank);
-                          
-                    }
-
-                    this->neighbors2Send[(1+c)+3*((1+b)+3*(1+a))] = neighborRank;
-                    this->neighbors2Recv[(1-c)+3*((1-b)+3*(1-a))] = neighborRank;
-                    
-                    }
-                }
-            }
-
+        int cs[3];
+        initMPIcoordinatesOfDomains( rank, cs );
 
         double boxSizePerDomain[3];
+    
         for( int n = 0; n < 3; n++ ){
         
             string res = GET + dirs[n] + "resolution";
             string right_str= GET + dirs[n] + RIGHT;
             this->boxCoordinates[n][0] = 0.0; //origin point (0,0,0) is left lower corner i=0 j=0 k=0
-            this->boxCoordinates[n][1] = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                              strdup(right_str.c_str()),
-                                                                              strdup(BRACKETS.c_str())));
+            this->boxCoordinates[n][1] = callPyFloatFunction( pInstance, right_str, BRACKETS );
+            
             this->boxSizes[n] = boxCoordinates[n][1];
             //  length of the box in normalized units
             
@@ -276,9 +343,7 @@ void Loader::load()
             }
             
             //  number of pixel per box
-            this->totPixelsPerBoxSide[n] = (int) PyInt_AsLong(PyObject_CallMethod(pInstance,
-                                                                                  strdup(res.c_str()),
-                                                                                  strdup(BRACKETS.c_str())));
+            this->totPixelsPerBoxSide[n] = (int) callPyLongFunction( pInstance, res, BRACKETS);
             
             if( totPixelsPerBoxSide[n] == 1 ){
                 // length per pixel equals to total size
@@ -333,114 +398,78 @@ void Loader::load()
     }
     
     
-    this->timeStep           = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                          strdup(GET_TIMESTEP.c_str()),
-                                                          strdup(BRACKETS.c_str())));
+    this->timeStep              =  callPyFloatFunction( pInstance, GET_TIMESTEP, BRACKETS );
     
-    this->numOfSpecies       = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                              strdup(GET_NUM_OF_SPECIES.c_str()),
-                                                              strdup(BRACKETS.c_str())));
+    this->numOfSpecies          =  callPyFloatFunction( pInstance, GET_NUM_OF_SPECIES, BRACKETS );
     
-    this->ppc                = (int) PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                           strdup(GET_NUM_OF_PARTICLES.c_str()),
-                                                           strdup(BRACKETS.c_str())));
+    this->ppc              = (int) callPyLongFunction( pInstance, GET_NUM_OF_PARTICLES, BRACKETS);
     
-    this->minimumDens2ResolvePPC =  PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                              strdup(GET_MIN_DENS_4_PPC.c_str()),
-                                                                              strdup(BRACKETS.c_str())));
-
+    this->minimumDens2ResolvePPC = callPyFloatFunction( pInstance, GET_MIN_DENS_4_PPC, BRACKETS );
     
-    this->maxTimestepsNum    = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                 strdup(GET_MAX_TIMESTEPS_NUM.c_str()),
-                                                                 strdup(BRACKETS.c_str())));
+    this->maxTimestepsNum        = callPyFloatFunction( pInstance, GET_MAX_TIMESTEPS_NUM, BRACKETS );
     
-    this->timestepsNum2Write = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(GET_TIMESTEP_WRITE.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
+    this->timestepsNum2Write     = callPyFloatFunction( pInstance, GET_TIMESTEP_WRITE, BRACKETS );
     
-    this->outputDir          = PyString_AS_STRING(PyObject_CallMethod(pInstance,
-                                                           strdup(GET_OUTPUT_DIR.c_str()),
-                                                           strdup(BRACKETS.c_str())));
+    this->outputDir              = callPyStringFunction( pInstance, GET_OUTPUT_DIR, BRACKETS );
     
-    this->fileNameTemplate   = PyString_AS_STRING(PyObject_CallMethod(pInstance,
-                                                                  strdup(GET_FILENAME_TEMPLATE.c_str()),
-                                                                  strdup(BRACKETS.c_str())));
+    this->fileNameTemplate       = callPyStringFunction( pInstance, GET_FILENAME_TEMPLATE, BRACKETS );
     
-    this->hyperviscosity     = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                  strdup(GET_HYPERVISCOSITY.c_str()),
-                                                                  strdup(BRACKETS.c_str())));
+    this->hyperviscosity         = callPyFloatFunction( pInstance, GET_HYPERVISCOSITY, BRACKETS );
     
+    this->electronmass           = callPyFloatFunction( pInstance, GET_ELECTRON_MASS, BRACKETS );
     
-    auto callMethod = PyObject_CallMethod(pInstance,
-                                          strdup(GET_CELL_BREAKDOWN_EFIELD_FACTOR.c_str()),
-                                          strdup(BRACKETS.c_str()));
+    this->smoothStride     = (int) callPyLongFunction( pInstance, GET_PRESSURE_SMOOTH_STRIDE, BRACKETS);
     
+    this->relaxFactor            = callPyFloatFunction( pInstance, GET_RELAX_FACTOR, BRACKETS );
     
-    this->electronmass       = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(GET_ELECTRON_MASS.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
+    this->numOfSpots             = callPyFloatFunction( pInstance, NUMBER_OF_LASER_SPOTS, BRACKETS );
     
-    this->smoothStride       = (int) PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(GET_PRESSURE_SMOOTH_STRIDE.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
-    
-    this->relaxFactor        = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(GET_RELAX_FACTOR.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
-    
-    
-    this->numOfSpots         = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                            strdup(NUMBER_OF_LASER_SPOTS.c_str()),
-                                                            strdup(BRACKETS.c_str())));
     
     if( numOfSpots > 0 ){
         
-        this->prtclType2Load = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                   strdup(PARTICLE_TYPE2LOAD.c_str()),
-                                                                   strdup(BRACKETS.c_str())))-1;
+        this->prtclType2Load = callPyFloatFunction( pInstance, PARTICLE_TYPE2LOAD, BRACKETS );
+        // -1 because in input file count starts in human manner from 1
+        this->prtclType2Load = this->prtclType2Load - 1;
+        
         if( prtclType2Load > (numOfSpecies-1) ){
             throw runtime_error("no such particle type for loading!");
         }
-        // -1 because in input count starts in human manner from 1
         
-        this->prtclTemp2Load = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(PARTICLE_TEMP2LOAD.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
+        this->prtclTemp2Load = callPyFloatFunction( pInstance, PARTICLE_TEMP2LOAD, BRACKETS );
         
-        this->pressureIncreaseRate = PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                    strdup(PRESSURE_INCREASE_RATE.c_str()),
-                                                                    strdup(BRACKETS.c_str())));
-        this->laserPulseDuration_tsnum = (int) PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                                                    strdup(GET_LASER_PULSE_DURATION.c_str()),
-                                                                                    strdup(BRACKETS.c_str())));
-    
+        this->pressureIncreaseRate = callPyFloatFunction( pInstance, PRESSURE_INCREASE_RATE, BRACKETS );
+        
+        this->laserPulseDuration_tsnum = (int) callPyLongFunction( pInstance, GET_LASER_PULSE_DURATION, BRACKETS);
     }
-
+    
+    auto callMethod = getPyMethod( pInstance, GET_CELL_BREAKDOWN_EFIELD_FACTOR, BRACKETS );
+    
     if( callMethod != NULL ){
         this->cellBreakdownEfieldFactor = PyFloat_AsDouble(callMethod);
-        string fctrMsg = "[Loader] [STABILITY] cell breakdown E-field factor = "+to_string(cellBreakdownEfieldFactor);
-        logger.writeMsg(fctrMsg.c_str(), INFO);
+        string fctrMsg = "[Loader] [STABILITY] cell breakdown E-field factor = "
+                                            +to_string(cellBreakdownEfieldFactor);
+        logger.writeMsg(fctrMsg.c_str(), DEBUG);
     }else{
-        this->cellBreakdownEfieldFactor = 0.005;
-        string fctrMsg = "[Loader] [STABILITY] cellBreakdownEfieldFactor = "+to_string(cellBreakdownEfieldFactor)+" (default)";
-        logger.writeMsg(fctrMsg.c_str(), INFO);
+        this->cellBreakdownEfieldFactor = BIGN;
+        string fctrMsg = "[Loader] [STABILITY] cellBreakdownEfieldFactor = "
+                                    +to_string(cellBreakdownEfieldFactor)+" (default)";
+        logger.writeMsg(fctrMsg.c_str(), DEBUG);
         
     }
     
-    callMethod = PyObject_CallMethod(pInstance,
-                                     strdup(GET_CRITICAL_PRESSURE.c_str()),
-                                     strdup(BRACKETS.c_str()));
+    callMethod = getPyMethod( pInstance, GET_CRITICAL_PRESSURE, BRACKETS );
     
     if( callMethod != NULL ){
         this->criticalPressure = PyFloat_AsDouble(callMethod);
-        string presMsg = "[Loader] [STABILITY] critical pressure = "+to_string(criticalPressure);
-        logger.writeMsg(presMsg.c_str(), INFO);
+        string presMsg = "[Loader] [STABILITY] critical pressure = "
+                                            +to_string(criticalPressure);
+        logger.writeMsg(presMsg.c_str(), DEBUG);
     }else{
-        this->criticalPressure = 500.0;
-        string presMsg = "[Loader] [STABILITY] critical pressure = "+to_string(criticalPressure)+" (default)";
-        logger.writeMsg(presMsg.c_str(), INFO);
+        this->criticalPressure = BIGN;
+        string presMsg = "[Loader] [STABILITY] critical pressure = "
+                            +to_string(criticalPressure)+" (default)";
+        logger.writeMsg(presMsg.c_str(), DEBUG);
     }
-
     
     if( rank == 0 ){
 
@@ -461,9 +490,9 @@ void Loader::load()
            
             logger.writeMsg(buf, INFO);
         }
+        
         msg = "[Loader] [COMMON] timeStep = "+to_string(timeStep);
         logger.writeMsg(msg.c_str(), INFO);
-        
         
         msg = "[Loader] [COMMON] Max timeStep number = "+to_string(maxTimestepsNum);
         logger.writeMsg(msg.c_str(), INFO);
@@ -542,131 +571,63 @@ string Loader::getFilenameTemplate(){
     return fileNameTemplate;
 }
 
-vector<double> Loader::getVelocity(double x, double y, double z,
-                                   int spieceiesType){
-    PyObject *pValue;
+vector<double> Loader::getVelocity( double x, double y, double z, int spieceiesType ){
     vector<double> velocity;
     
     for( int n = 0; n < 3; n++ ){
         string varName =GET_VELOCITY+dirs[n]+SPIECIES+to_string(spieceiesType+1);
 
-        pValue = PyObject_CallMethod(pInstance, strdup(varName.c_str()),
-                                     strdup(BRACKETS_3DOUBLE.c_str()),x,y,z);
-        velocity.push_back(PyFloat_AsDouble(pValue));
+        double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+        velocity.push_back(val);
     }
     return velocity;
 }
 
-
-
-
-vector<double> Loader::getBfield(double x,double y,double z){
-    PyObject *pValue;
+vector<double> Loader::getBfield( double x, double y, double z ){
     vector<double> bField;
-    
     for( int n = 0; n < 3; n++ ){
-        string varName =GET_BFIELD+dirs[n];
-        
-        pValue = PyObject_CallMethod(pInstance, strdup(varName.c_str()),
-                                     strdup(BRACKETS_3DOUBLE.c_str()),x,y,z);
-        bField.push_back(PyFloat_AsDouble(pValue));
+        string varName = GET_BFIELD+dirs[n];
+        double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+        bField.push_back(val);
     }
     return bField;
 }
 
-double Loader::getDensity(double x,double y,double z, int spieceiesType){
+double Loader::getDensity( double x, double y, double z, int spieceiesType ){
     string varName = GET_DENSITY+SPIECIES+to_string(spieceiesType+1);
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS_3DOUBLE.c_str()),
-                                                x,y,z));
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
 
-
-double Loader::getMass4spieceies(int spieceiesType){
+double Loader::getMass4spieceies( int spieceiesType ){
     string varName = GET_MASS+SPIECIES+to_string(spieceiesType+1);
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS.c_str())));
+    return callPyFloatFunction( pInstance, varName, BRACKETS );
 }
 
-double Loader::getCharge4spieceies(int spieceiesType){
+double Loader::getCharge4spieceies( int spieceiesType ){
     string varName = GET_CHARGE+SPIECIES+to_string(spieceiesType+1);
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS.c_str())));
+    return callPyFloatFunction( pInstance, varName, BRACKETS );
 }
 
-
-double Loader::getElectronPressure(double x,double y,double z){
+double Loader::getElectronPressure( double x, double y, double z ){
     string varName = GET_ELEPRES;
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS_3DOUBLE.c_str()),
-                                                x,y,z));
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
 
-
-double Loader::getTargetIonDensityProfile(double x,double y,double z){
+double Loader::getTargetIonDensityProfile( double x, double y, double z ){
     string varName = GET_TARGET_ION_DENSITY2SUSTAIN;
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS_3DOUBLE.c_str()),
-                                                x,y,z));
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
 
-
-
-double Loader::getElectronPressureProfile(double x,double y,double z){
+double Loader::getElectronPressureProfile( double x, double y, double z ){
     string varName = GET_ELECTRON_PRESSURE2SUSTAIN;
-    return PyFloat_AsDouble(PyObject_CallMethod(pInstance,
-                                                strdup(varName.c_str()),
-                                                strdup(BRACKETS_3DOUBLE.c_str()),
-                                                x,y,z));
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
-
-
 
 double Loader::getParticlesPerCellNumber(){
     return ppc;
 }
 
-PyObject * Loader::getPythonClassInstance(string className){
-    PyObject  *pName, *pModule, *pDict, *pClass, *pInstance;
-    string msg = "[Loader] Start to instantiate the Python class " + className;
-    logger.writeMsg(msg.c_str(), DEBUG);
-
-    pName = PyString_FromString(className.c_str());
-    
-    pModule = PyImport_Import(pName);
-    if( pModule == NULL ){
-            logger.writeMsg("*****************************************************", CRITICAL);
-            logger.writeMsg("****                                             ****", CRITICAL);
-            logger.writeMsg("****  STOP SIMULATION!!!    INPUT FILE PROBLEM   ****", CRITICAL);
-            logger.writeMsg("****                                             ****", CRITICAL);
-            logger.writeMsg("****   try debug mode 'make -DLOG'               ****", CRITICAL);
-            logger.writeMsg("****   check python enviroment and imports       ****", CRITICAL);
-            logger.writeMsg("*****************************************************", CRITICAL);
-            exit(-1);
-    }
-    
-    pDict = PyModule_GetDict(pModule);
-    pClass = PyDict_GetItemString(pDict, className.c_str());
-    
-    if( PyCallable_Check(pClass) ){
-        pInstance = PyObject_CallObject(pClass, NULL);
-    }else{
-        logger.writeMsg("[Loader] Cannot instantiate the Python class", CRITICAL);
-        pInstance = nullptr;
-    }
-    
-    logger.writeMsg("[Loader] finish to instantiate the Python class ", DEBUG);
-    
-    return pInstance;
-}
-
 Loader::~Loader(){
-    
     Py_Finalize();
     logger.writeMsg("[Loader] FINALIZE...OK!", DEBUG);
 }

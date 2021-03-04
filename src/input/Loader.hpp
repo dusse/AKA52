@@ -44,6 +44,18 @@ private:
     
     PyObject *pInstance;
     
+    double callPyFloatFunction( PyObject*, const std::string, const std::string );
+    long callPyLongFunction( PyObject*, const std::string, const std::string );
+    std::string callPyStringFunction( PyObject*, const std::string, const std::string );
+    
+    double callPyFloatFunctionWith3args( PyObject*, const std::string,
+                                        const std::string, double x,double y,double z );
+    
+    PyObject * getPyMethod( PyObject*, const std::string, const std::string );
+    
+    void initMPIcoordinatesOfDomains( int, int[3] );
+
+    
 public:
     int runType;
     std::string inputfile;
@@ -72,8 +84,8 @@ public:
     double relaxFactor;
     
     //stability parameters
-    double cellBreakdownEfieldFactor = 0.005;
-    double criticalPressure = 500.0;
+    double cellBreakdownEfieldFactor;
+    double criticalPressure;
     
     //laser staff
     int numOfSpots = 0;
