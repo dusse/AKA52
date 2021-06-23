@@ -57,7 +57,6 @@ run in terminal:
 2. make   
 3. make install   
 
-
 _______________________
 # physics included:
 _______________________   
@@ -137,7 +136,6 @@ _______________________
 
 8. if number of laser focal spots is more than zero,      
    auxiliary particle type is reserved for the loading fraction 
-
 
 _______________________
 #   TROUBLESHOUTING:
