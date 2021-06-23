@@ -24,9 +24,14 @@ const string  GET_BFIELD   = "getBfield";
 const string  GET_ELEPRES  = "getElectronPressure";
 const string  GET_PRESSURE_SMOOTH_STRIDE = "getElectronPressureSmoothingStride";
 const string  GET_VELOCITY = "getVelocity";
+
 const string  GET_MASS   = "getMass";
 const string  GET_CHARGE = "getCharge";
-const string  SPIECIES   = "4species";
+const string  GET_IFPARTICLETYPEISFROZEN = "getIfParticleTypeIsFrozen";
+const string  GET_PPC = "getPPC";
+const string  SPECIES   = "4species";
+const string  GET_PPC4LOADED_PARTICLES = "getPPC4loadedParticles";
+
 const string  GET_MPI_DOMAIN_NUM = "mpiDomainNum";
 
 const string  GET_MIN_DENS_4_PPC = "getMinimumDens2ResolvePPC";
@@ -42,7 +47,7 @@ const string  RIGHT  = "right";
 const string  GET_RUN_TYPE = "getRunType";
 const string  GET_INPUT_FILE = "getInputFile";
 
-const string  GET_HYPERVISCOSITY = "getHyperviscosity";
+const string  GET_RESISTIVITY = "getResistivity";
 const string  GET_BFIELD_LIMIT    = "getBfieldLimit";
 
 const string  GET_ELECTRON_MASS  = "getElectronMass";
@@ -69,13 +74,18 @@ const string  dirs[] = {"X", "Y", "Z"};
 /*#################################################################################################*/
 
 PyObject * Loader::getPythonClassInstance(string className){
-    PyObject  *pName, *pModule, *pDict, *pClass, *pInstance;
+    PyObject  *pName, *pClass, *pModule, *pDict;
     string msg = "[Loader] Start to instantiate the Python class " + className;
     logger.writeMsg(msg.c_str(), DEBUG);
     
+#if PY_MAJOR_VERSION >= 3
+    pName = PyUnicode_FromString(className.c_str());
+#else
     pName = PyString_FromString(className.c_str());
+#endif
     
     pModule = PyImport_Import(pName);
+    
     if( pModule == NULL ){
         logger.writeMsg("*****************************************************", CRITICAL);
         logger.writeMsg("****                                             ****", CRITICAL);
@@ -104,6 +114,7 @@ PyObject * Loader::getPythonClassInstance(string className){
 }
 
 
+
 double Loader::callPyFloatFunction( PyObject* instance,
                                     const string funcName,
                                     const string brackets){
@@ -127,11 +138,18 @@ long Loader::callPyLongFunction( PyObject* instance,
     return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
 }
 
+
 string Loader::callPyStringFunction( PyObject* instance,
-                               const string funcName,
-                               const string brackets){
+                                    const string funcName,
+                                    const string brackets){
     
+#if PY_MAJOR_VERSION >= 3
+    PyObject* str = PyUnicode_AsUTF8String(getPyMethod(instance,funcName,brackets));
+    return PyBytes_AsString(str);
+#else
     return PyString_AS_STRING(getPyMethod(instance,funcName,brackets));
+#endif
+    
 }
 
 
@@ -414,7 +432,7 @@ void Loader::load(){
     
     this->fileNameTemplate       = callPyStringFunction( pInstance, GET_FILENAME_TEMPLATE, BRACKETS );
     
-    this->hyperviscosity         = callPyFloatFunction( pInstance, GET_HYPERVISCOSITY, BRACKETS );
+    this->resistivity            = callPyFloatFunction( pInstance, GET_RESISTIVITY, BRACKETS );
     
     this->electronmass           = callPyFloatFunction( pInstance, GET_ELECTRON_MASS, BRACKETS );
     
@@ -426,6 +444,8 @@ void Loader::load(){
     
     
     if( numOfSpots > 0 ){
+        
+        numOfSpecies += 1; //need to reserve space for loaded particles
         
         this->prtclType2Load = callPyFloatFunction( pInstance, PARTICLE_TYPE2LOAD, BRACKETS );
         // -1 because in input file count starts in human manner from 1
@@ -520,7 +540,7 @@ void Loader::load(){
         
         }
         
-        msg = "[Loader] [OHM's LAW]: hyperviscosity = "+to_string(hyperviscosity);
+        msg = "[Loader] [OHM's LAW]: resistivity = "+to_string(resistivity);
         logger.writeMsg(msg.c_str(), INFO);
         
         #ifdef USE_EDGE_FACTOR
@@ -571,11 +591,11 @@ string Loader::getFilenameTemplate(){
     return fileNameTemplate;
 }
 
-vector<double> Loader::getVelocity( double x, double y, double z, int spieceiesType ){
+vector<double> Loader::getVelocity( double x, double y, double z, int speciesType ){
     vector<double> velocity;
     
     for( int n = 0; n < 3; n++ ){
-        string varName =GET_VELOCITY+dirs[n]+SPIECIES+to_string(spieceiesType+1);
+        string varName =GET_VELOCITY+dirs[n]+SPECIES+to_string(speciesType+1);
 
         double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
         velocity.push_back(val);
@@ -593,20 +613,53 @@ vector<double> Loader::getBfield( double x, double y, double z ){
     return bField;
 }
 
-double Loader::getDensity( double x, double y, double z, int spieceiesType ){
-    string varName = GET_DENSITY+SPIECIES+to_string(spieceiesType+1);
+double Loader::getDensity( double x, double y, double z, int speciesType ){
+    string varName = GET_DENSITY+SPECIES+to_string(speciesType+1);
     return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
 
-double Loader::getMass4spieceies( int spieceiesType ){
-    string varName = GET_MASS+SPIECIES+to_string(spieceiesType+1);
+double Loader::getMass4species( int speciesType ){
+    string varName;
+    if( numOfSpots > 0 && speciesType == numOfSpecies-1 ){
+        varName = GET_MASS+SPECIES+to_string(prtclType2Load+1);
+    }else{
+        varName = GET_MASS+SPECIES+to_string(speciesType+1);
+    }
     return callPyFloatFunction( pInstance, varName, BRACKETS );
 }
 
-double Loader::getCharge4spieceies( int spieceiesType ){
-    string varName = GET_CHARGE+SPIECIES+to_string(spieceiesType+1);
+double Loader::getCharge4species( int speciesType ){
+    string varName;
+    if( numOfSpots > 0 && speciesType == numOfSpecies-1 ){
+        varName = GET_CHARGE+SPECIES+to_string(prtclType2Load+1);
+    }else{
+        varName = GET_CHARGE+SPECIES+to_string(speciesType+1);
+    }
     return callPyFloatFunction( pInstance, varName, BRACKETS );
 }
+
+int Loader::getIfSpeciesFrozen( int speciesType ){
+    if( numOfSpots > 0 && speciesType == numOfSpecies-1){
+        return 0;// loaded particles are always unfrozen / needed for restart
+    }
+    string varName = GET_IFPARTICLETYPEISFROZEN+SPECIES+to_string(speciesType+1);
+    return int(callPyFloatFunction( pInstance, varName, BRACKETS ));
+}
+
+
+
+double Loader::getPPC4species(int speciesType){
+    string varName;
+    
+    if( numOfSpots > 0 && speciesType == numOfSpecies-1 ){
+         varName = GET_PPC4LOADED_PARTICLES;
+    }else{
+        varName = GET_PPC+SPECIES+to_string(speciesType+1);
+    }
+   
+    return callPyFloatFunction( pInstance, varName, BRACKETS );
+}
+
 
 double Loader::getElectronPressure( double x, double y, double z ){
     string varName = GET_ELEPRES;
@@ -623,9 +676,6 @@ double Loader::getElectronPressureProfile( double x, double y, double z ){
     return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
 
-double Loader::getParticlesPerCellNumber(){
-    return ppc;
-}
 
 Loader::~Loader(){
     Py_Finalize();

@@ -31,12 +31,13 @@ class Initializer:
         self.fileTemplate = "test_laser3D_"
         
         # Particles
-        self.ppc = 5
-        self.ppcMinDens = 0.2
+        self.ppc = [1, 1]
+        self.ppcMinDens = 0.01
         
         self.numOfSpecies = 2
         self.masses  = [1, 1]
         self.charges = [1, 1]
+        self.ppc4load = 100
         self.dens = [self.ppcMinDens, 1.0]
         self.vel1 = 0.01
         self.vel2 = 0.00001
@@ -65,7 +66,6 @@ class Initializer:
         self.Bfield = [0.0, 0.0, 0.0]
         
         #ohm's law
-        self.hyperviscosity = 0.1
         self.resistivity = 0.0
         
         # pressure tensor
@@ -77,6 +77,7 @@ class Initializer:
         #misc
         self.ZERO = 0.0
         self.PI = 3.14159265358979323846
+        self.FROZEN = 1
     
     
     
@@ -189,18 +190,21 @@ class Initializer:
     def getNumOfSpecies(self):
         return self.numOfSpecies
     
-    def getParticlesPerCellNumber(self):
-        return self.ppc
-    
     def getMinimumDens2ResolvePPC(self):
         return self.ppcMinDens
     
-    #   species 1
+    #           species 1
+    def getPPC4species1(self):
+        return self.ppc[0]
+    
     def getMass4species1(self):
         return self.masses[0]
     
     def getCharge4species1(self):
         return self.charges[0]
+    
+    def getIfParticleTypeIsFrozen4species1(self):
+        return self.FROZEN
     
     def getDensity4species1(self, x, y, z):
         if (z >= self.surface_pos):
@@ -209,7 +213,7 @@ class Initializer:
             return self.ZERO
 
 
-    #   species 1: modulus of velocity for Maxwell distribution
+    #           species 1: modulus of velocity for Maxwell distribution
     def getVelocityX4species1(self, x, y, z):
         return self.vel1
     
@@ -219,7 +223,10 @@ class Initializer:
     def getVelocityZ4species1(self, x, y, z):
         return self.vel1
     
-    #   species 2
+    #           species 2
+    def getPPC4species2(self):
+        return self.ppc[1]
+    
     def getMass4species2(self):
         return self.masses[1]
     
@@ -227,6 +234,8 @@ class Initializer:
         return self.charges[1]
     
     
+    def getIfParticleTypeIsFrozen4species2(self):
+        return self.FROZEN
     
     def getDensity4species2(self, x, y, z):
         if (z < self.surface_pos):
@@ -234,7 +243,7 @@ class Initializer:
         else:
             return self.ZERO
 
-    #   species 2: modulus of velocity for Maxwell distribution
+    #           species 2: modulus of velocity for Maxwell distribution
     def getVelocityX4species2(self, x, y, z):
         return self.vel2
     
@@ -253,9 +262,13 @@ class Initializer:
     def getLaserPulseDuration(self):
         return self.maxtsnum
     
-    # partciles type (1,2,...) used for dense target density loading
+    # partciles type (1,2,...) used for the loaded fraction to copy m/e
     def getParticleType2Load(self):
         return self.type2Load
+    
+    # can specify ppc for the loaded fraction
+    def getPPC4loadedParticles(self):
+        return self.ppc4load
     
     # set density profile to sustain by ablation operator
     def getTargetIonDensity2sustain(self, x, y, z):
@@ -266,7 +279,7 @@ class Initializer:
 
 
 
-    # smooth polynom by roch smets 2014 PoP
+    # smooth enough polynom by roch smets 2014 PoP
     def polynomByRochSmets(self, x): # x = |x|
         return -6.0*x**5+15.0*x**4-10.0*x**3+1.0
     
@@ -314,9 +327,6 @@ class Initializer:
     def getBfieldZ(self, x, y, z):
         return self.Bfield[2]
     
-    #   physics: ohm's law hyper-viscosity
-    def getHyperviscosity(self):
-        return self.hyperviscosity
     
     #   physics: ohm's law resistivity
     def getResistivity(self):
@@ -333,5 +343,6 @@ class Initializer:
     #   physics: pressure evolution : smoothing
     def getElectronPressureSmoothingStride(self):
         return self.smoothStride
+
 
 

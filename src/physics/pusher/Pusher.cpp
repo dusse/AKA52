@@ -15,7 +15,7 @@ Pusher::Pusher(shared_ptr<Loader> ldr,
 }
 
 Pusher::~Pusher(){
-    for(int i = 0; i < totalNum; i++){
+    for( int i = 0; i < totalNum; i++ ){
         delete particles[i];
     }
     delete[] particles;
@@ -48,12 +48,14 @@ void Pusher::initParticles(int num, int typesNum){
     
     weights = new double[typesNum];
     charges = new double[typesNum];
-    masses = new double[typesNum];
+    masses  = new double[typesNum];
+    iffrozens  = new int[typesNum];
     
-    for(int spn=0; spn<typesNum; spn++){
+    for( int spn = 0; spn < typesNum; spn++ ){
         weights[spn] = 0.0;
         charges[spn] = 0.0;
         masses[spn] = 0.0;
+        iffrozens[spn] = 0;// 1 - frozen
     }
     double pos[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     double vel[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -76,24 +78,30 @@ void Pusher::initParticles(int num, int typesNum){
     totinBoxInit = TOT_IN_BOX;
 }
 
-void Pusher::reallocateParticles(){
+void Pusher::reallocateParticles(int expected){
     auto start_time = high_resolution_clock::now();
     logger->writeMsg(("[Pusher] reallocate ..."),  DEBUG);
     double const ALLOCATION_FACTOR = 1.5;
-    int totalNumNew  = int (ALLOCATION_FACTOR*totalNum);
+    double toRealocateNum;
+    if( expected < totalNum ){
+        toRealocateNum = ALLOCATION_FACTOR*totalNum;
+    }else{
+        toRealocateNum = ALLOCATION_FACTOR*expected;
+    }
+    int totalNumNew  = int(toRealocateNum);
     
     vector<shared_ptr<Particle>> particlesTemp;
     particlesTemp.reserve(currentPartclNumOnDomain);
     
-    for( int idx = 0; idx < currentPartclNumOnDomain; idx++){
+    for( int idx = 0; idx < currentPartclNumOnDomain; idx++ ){
         particlesTemp.push_back(shared_ptr<Particle>(new Particle));
     }
     
-    for(int i = 0; i < currentPartclNumOnDomain; i++){
+    for( int i = 0; i < currentPartclNumOnDomain; i++ ){
         particlesTemp[i]->reinitializeUsingParticle(particles[i]);
     }
     
-    for(int i = 0; i < totalNum; i++){
+    for( int i = 0; i < totalNum; i++ ){
         delete particles[i];
     }
     
@@ -102,7 +110,7 @@ void Pusher::reallocateParticles(){
     totalNum = totalNumNew;
     particles = new Particle*[totalNum];
     
-    for(int i = 0; i < currentPartclNumOnDomain; i++){
+    for( int i = 0; i < currentPartclNumOnDomain; i++ ){
         Particle* pa = new Particle();
         particles[i] = pa;
         particles[i]->reinitializeUsingParticle(particlesTemp[i]);
@@ -130,7 +138,7 @@ void Pusher::reallocateParticles(){
 void Pusher::addParticles(vector<shared_ptr<Particle>> particles2add){
    
     if( currentPartclNumOnDomain+particles2add.size() >= totalNum ){
-        reallocateParticles();
+        reallocateParticles(particles2add.size());
     }
 
     for( int i = 0; i < particles2add.size(); i++ ){
@@ -156,6 +164,12 @@ void Pusher::setParticleMass4Type(int type, double mass){
     masses[type] = mass;
     logger->writeMsg(("[Pusher] masses["+to_string(type)
                                 +"] = "+to_string(mass)).c_str(),  DEBUG);
+}
+
+void Pusher::setIfParticleTypeIsFrozen(int type, int iffrozen){
+    iffrozens[type] = iffrozen;
+    logger->writeMsg(("[Pusher] iffrozens["+to_string(type)
+                      +"] = "+to_string(iffrozen)).c_str(),  DEBUG);
 }
 
 int Pusher::getTotalParticleNumber(){
@@ -277,11 +291,7 @@ void Pusher::push(int phase, int i_time){
     
     double* prtclPos;
     double* prtclVel;
-    double cflvel[3];
-    
-    for( int coord = 0; coord < 3; coord++ ){
-        cflvel[coord] = loader->spatialSteps[coord]/ts;
-    }
+
     //need to save previous value
     if( phase == PREDICTOR ){
         for( int idx = 0; idx < currentPartclNumOnDomain; idx++ ){
@@ -293,11 +303,17 @@ void Pusher::push(int phase, int i_time){
         }
     }
     
+    int numOfSpecies = loader->getNumberOfSpecies();
+    
     for( int idx = 0; idx < currentPartclNumOnDomain; idx++ ){
         
         prtclPos = particles[idx]->getPosition();
         prtclVel = particles[idx]->getVelocity();
         type     = particles[idx]->getType();
+        
+        if( iffrozens[type] == 1 ){
+            continue;
+        }
         
         for( int coord = 0; coord < 3; coord++ ){
             E[coord] = 0.0;
@@ -466,7 +482,7 @@ void Pusher::push(int phase, int i_time){
     logger->writeMsg(msg003.c_str(),  DEBUG);
     
     if( (tot2add >  tot2remove) && ((currentPartclNumOnDomain + tot2add - tot2remove) >= totalNum) ){
-        reallocateParticles();
+        reallocateParticles(tot2add);
     }
     
     for( int i = 0; i < tot2add; i++ ){
@@ -516,6 +532,10 @@ void Pusher::push(int phase, int i_time){
     
     if( brokenParticlesNum > 0 ){
         logger->writeMsg(("[Pusher] found broken particles = "+to_string(brokenParticlesNum)).c_str(),  CRITICAL);
+        if( brokenParticlesNum > 1000){
+            throw runtime_error("too much particles are broken");
+        }
+        
     }else{
         logger->writeMsg("[Pusher] no broken particles on the domain",  DEBUG);
     }
@@ -541,7 +561,7 @@ void Pusher::push(int phase, int i_time){
     MPI_Allreduce(&currentPartclNumOnDomain, &TOT_IN_BOX, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     logger->writeMsg(("[Pusher] total particles in the box = "+to_string(TOT_IN_BOX)).c_str(),  DEBUG);
 
-    if( i_time % 50 == 0 && phase == PREDICTOR ){
+    if( i_time % 20 == 0 && phase == PREDICTOR ){
         performSorting();
         
     }

@@ -16,8 +16,8 @@ EleMagManager::EleMagManager(std::shared_ptr<Loader> ldr,
 void EleMagManager::initialize(){
     
     int xRes = loader->resolution[0],
-    yRes = loader->resolution[1],
-    zRes = loader->resolution[2];
+        yRes = loader->resolution[1],
+        zRes = loader->resolution[2];
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     
     int nG2= xResG2*yResG2*zResG2;
@@ -32,8 +32,8 @@ void EleMagManager::initialize(){
     VectorVar** current = gridMgr->getVectorVariableOnG2(CURRENT);
     int ijkG2, h;
     // CURRENT_AUX is smoothed CURRENT, normally CURRENT_AUX is set in ClosureManager.cpp
-    for(ijkG2=0; ijkG2<nG2; ijkG2++){
-        for (h = 0; h < 3; h++) {
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( h = 0; h < 3; h++ ){
             gridMgr->setVectorVariableForNodeG2(ijkG2, CURRENT_AUX, h,
                                                 current[ijkG2]->getValue()[h]);
         }
@@ -46,8 +46,8 @@ void EleMagManager::initialize(){
     calculateBhalf(CORRECTOR);
     calculateJhalf(CORRECTOR);
     
-    for(ijkG2=0; ijkG2<nG2; ijkG2++){
-        for (h = 0; h < 3; h++) {
+    for( ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+        for( h = 0; h < 3; h++ ){
             gridMgr->setVectorVariableForNodeG2(ijkG2, CURRENT_AUX, h,
                                                 current[ijkG2]->getValue()[h]);
         }
@@ -105,7 +105,7 @@ void EleMagManager::initBfieldDampingCoeff(){
     
     double normLengthXleft, normLengthXrigt,
            normLengthYleft, normLengthYrigt,
-           normLengthZleft, normLengthZrigt;
+           normLengthZleft, normLengthZrigt, minCoef;
     
     double x, y, z;
     
@@ -119,57 +119,56 @@ void EleMagManager::initBfieldDampingCoeff(){
                 
                 idx2use = IDX(i,j,k, xResG1,yResG1,zResG1);
                 
+                normLengthXleft = 1; normLengthXrigt = 1;
+                normLengthYleft = 1; normLengthYrigt = 1;
+                normLengthZleft = 1; normLengthZrigt = 1;
+                minCoef = 1;
+                
                 if( leftXWidth > 0.0 ){
                     normLengthXleft = x/leftXWidth;
-                    if( abs(normLengthXleft) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthXleft;
-                        continue;
+                    if( normLengthXleft >= 0 && normLengthXleft < minCoef ){
+                        minCoef = normLengthXleft;
                     }
                 }
                 
                 if( rigtXWidth > 0.0 ){
                     normLengthXrigt = ( Lx - x )/rigtXWidth;
-                    if( abs(normLengthXrigt) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthXrigt;
-                        continue;
+                    if( normLengthXrigt >= 0 && normLengthXrigt < minCoef ){
+                        minCoef = normLengthXrigt;
                     }
                 }
                 
                 if( leftYWidth > 0.0 ){
                     normLengthYleft = y/leftYWidth;
-                    if( abs(normLengthYleft) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthYleft;
-                        continue;
+                    if( normLengthYleft >= 0 && normLengthYleft < minCoef){
+                        minCoef = normLengthYleft;
                     }
                 }
                 
                 if( rigtYWidth > 0.0 ){
                     normLengthYrigt = ( Ly - y )/rigtYWidth;
-                    if( abs(normLengthYrigt) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthYrigt;
-                        continue;
+                    if( normLengthYrigt >= 0 && normLengthYrigt < minCoef ){
+                        minCoef = normLengthYrigt;
                     }
                 }
                 
                 if( leftZWidth > 0.0 ){
                     normLengthZleft = z/leftZWidth;
-                    if( abs(normLengthZleft) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthZleft;
-                        continue;
+                    if( normLengthZleft >= 0 && normLengthZleft < minCoef ){
+                        minCoef = normLengthZleft;
                     }
                 }
                 
                 if( rigtZWidth > 0.0 ){
                     normLengthZrigt = ( Lz - z )/rigtZWidth;
-                    if( abs(normLengthZrigt) < 1 ){
-                        BfieldDampingCoeff[idx2use] = normLengthZrigt;
-                        continue;
+                    if( normLengthZrigt >= 0 && normLengthZrigt < minCoef ){
+                        minCoef = normLengthZrigt;
                     }
                 }
+                BfieldDampingCoeff[idx2use] = minCoef;
             }
         }
     }
-    
 }
 
 void EleMagManager::calculateMagneticField(int magField2use, int eleField2use, int magField2save){
@@ -262,9 +261,9 @@ void EleMagManager::calculateCurrent(int magField2use, int current2save){
     double currentX, currentY, currentZ;
     
     int i,j,k;
-    for ( i=1; i<xSize+1; i++){
-        for ( j=1; j<ySize+1; j++){
-            for ( k=1; k<zSize+1; k++){
+    for( i = 1; i < xSize+1; i++ ){
+        for( j = 1; j < ySize+1; j++ ){
+            for( k = 1; k < zSize+1; k++ ){
                 
                 idxG1 = IDX(i,j,k,xSize+1,ySize+1,zSize+1);
                 
@@ -272,7 +271,7 @@ void EleMagManager::calculateCurrent(int magField2use, int current2save){
                 Bydx = 0; Bydz = 0;
                 Bzdx = 0; Bzdy = 0;
         
-                for (int pairNum = 0; pairNum<4; pairNum++){
+                for( int pairNum = 0; pairNum < 4; pairNum++ ){
             
                     left = ngborsXder[8*idxG1+2*pairNum+0];
                     rigt = ngborsXder[8*idxG1+2*pairNum+1];// index ijk is saved in +1
@@ -443,7 +442,7 @@ void EleMagManager::calculateEnext(int phase){
     double ts = loader->getTimeStep();
     double cellBreakdownEfield[3];
     
-    for(int coord=0; coord < 3; coord++){
+    for( int coord = 0; coord < 3; coord++ ){
         cflvel[coord] = loader->spatialSteps[coord]/ts;
         cellBreakdownEfield[coord] = loader->cellBreakdownEfieldFactor*cflvel[coord]/ts;
     }
@@ -453,6 +452,15 @@ void EleMagManager::calculateEnext(int phase){
     
     VectorVar** current  = gridMgr->getVectorVariableOnG2(CURRENT);
     VectorVar** density  = gridMgr->getVectorVariableOnG2(DENSELEC);
+    VectorVar** dension;
+    int numOfSpecies = loader->getNumberOfSpecies();
+
+    if ( loader->numOfSpots > 0 ) {
+        dension = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(numOfSpecies-1));
+    }else{
+        dension = gridMgr->getVectorVariableOnG2(DENSELEC);
+    }
+    
     VectorVar** velocity = gridMgr->getVectorVariableOnG2(VELOCION);
     
     int compIDX[3][3]={{0, 1, 2},{1,3,4},{2,4,5}};
@@ -475,7 +483,6 @@ void EleMagManager::calculateEnext(int phase){
     int idxG1, idxG2, idxNeigbor, coord, neighbour, curPcomp;
     
     double locB[3], locE[3], lapJ[3], divP[3], dens;
-    const double hypVis = loader->hyperviscosity;
     double dL, dP;
     
     int istart = 1, iend = xSize+1, jstart = 1, jend = ySize+1, kstart = 1, kend = zSize+1;
@@ -553,21 +560,30 @@ void EleMagManager::calculateEnext(int phase){
                 ideal[1] = -(velI[2]*locB[0] - velI[0]*locB[2]);
                 ideal[2] = -(velI[0]*locB[1] - velI[1]*locB[0]);
                 
+                double Pxx = presEle[idxG2]->getValue()[0];
+                double Pyy = presEle[idxG2]->getValue()[3];
+                double Pzz = presEle[idxG2]->getValue()[5];
+                double trP = (Pxx+Pyy+Pzz)/3;
+                double dens2use = dension[idxG2]->getValue()[0];
+                double resist0 = pow(dens2use, 1.5)/pow(trP, 1.5);
+                double resist = loader->resistivity;
+                gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 0, resist);
+                gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 1, resist0);
                 
                 locE[0] = - (velI[1]*locB[2] - velI[2]*locB[1])
                           + (   J[1]*locB[2] -    J[2]*locB[1])*revertdens
                           - divP[0]*revertdens
-                          - hypVis*lapJ[0];
+                          + resist*J[0];
                 
                 locE[1] = - (velI[2]*locB[0] - velI[0]*locB[2])
                           + (   J[2]*locB[0] -    J[0]*locB[2])*revertdens
                           - divP[1]*revertdens
-                          - hypVis*lapJ[1];
+                          + resist*J[1];
                 
                 locE[2] = - (velI[0]*locB[1] - velI[1]*locB[0])
                           + (   J[0]*locB[1] -    J[1]*locB[0])*revertdens
                           - divP[2]*revertdens
-                          - hypVis*lapJ[2];
+                          + resist*J[2];
                 
                 for ( coord = 0; coord < 3; coord++ ) {
                     if( abs(locE[coord]) < cellBreakdownEfield[coord] ){

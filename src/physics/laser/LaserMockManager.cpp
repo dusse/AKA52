@@ -22,7 +22,9 @@ LaserMockManager::~LaserMockManager(){
 
 
 void LaserMockManager::initialize(){
-    PARTICLE_TYPE2LOAD = loader->prtclType2Load;
+    int numOfSpecies = loader->getNumberOfSpecies();
+
+    PARTICLE_TYPE2LOAD = numOfSpecies-1;//last type is reserved for loaded particles
     
     int xRes = loader->resolution[0],
         yRes = loader->resolution[1],
@@ -111,12 +113,13 @@ void LaserMockManager::addIons(){
     
     int ptclIDX;
     
-    VectorVar** dens = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(PARTICLE_TYPE2LOAD));
+    VectorVar** dens = gridMgr->getVectorVariableOnG2(DENSELEC);
     vector<shared_ptr<Particle>> particles2add;
     int particle_idx = 0;
     double r1, r2;
     int idxOnG2;
     int requiredPrtclNum;
+
     for( i = 0; i < xRes; i++){
         for( j = 0; j < yRes; j++) {
             for( k = 0; k < zRes; k++){
@@ -126,7 +129,14 @@ void LaserMockManager::addIons(){
                 double desireDens =
                 targetIonDensityProfile[idxOnG2] - dens[idxOnG2]->getValue()[0];
                 
-                double particleWeight = pusher->getParticleWeight4Type(PARTICLE_TYPE2LOAD);
+                double pres = electronPressureProfile[idxOnG2];
+                int type2use = 0;
+                if( pres > 0.0 ){
+                    type2use = PARTICLE_TYPE2LOAD;
+                }else{
+                    type2use = loader->prtclType2Load;
+                }
+                double particleWeight = pusher->getParticleWeight4Type(type2use);
                 
                 requiredPrtclNum = int(desireDens/particleWeight);
                 
@@ -151,7 +161,7 @@ void LaserMockManager::addIons(){
                     
                     particles2add[particle_idx]->setPosition(pos2Save);
                         
-                    particles2add[particle_idx]->setType(PARTICLE_TYPE2LOAD);
+                    particles2add[particle_idx]->setType(type2use);
                         
                     r1 = RNM;
                     r2 = RNM;

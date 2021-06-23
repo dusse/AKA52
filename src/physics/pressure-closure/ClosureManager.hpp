@@ -40,7 +40,7 @@ private:
     void setDriver(int );
     void setIsotropization(double[6], double[6]);
     
-    void gradients(double[3][3], double[3][3], double[3][3][3], int[3]);
+    void gradientsVelocity();
     
     void transformMatrix(double[3][3], double[3][3], double[3][3], int);
     void ortho(double[3], double[3][3]);

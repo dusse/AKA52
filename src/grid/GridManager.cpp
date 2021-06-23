@@ -607,6 +607,11 @@ void GridManager::initG2Nodes(){
                 VectorVar* presure_smo = new VectorVar(PRESSURE_SMO, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* pdriver     = new VectorVar(DRIVER,       {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* pdriver_aux = new VectorVar(DRIVER_AUX,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* driver_cross = new VectorVar(DRIVER_CROSS,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* driver_diag = new VectorVar(DRIVER_DIAG,   {0.0, 0.0, 0.0});
+                VectorVar* resistivity = new VectorVar(RESISTIVITY,   {0.0, 0.0});
+                
+                
                 
                 totVarsOnG2 = NUM_OF_MAIN_G2VARS+2*numOfSpecies;
                 
@@ -622,6 +627,10 @@ void GridManager::initG2Nodes(){
                 nodesG2vars[G2nodesNumber*PRESSURE_SMO+idx] = presure_smo;
                 nodesG2vars[G2nodesNumber*DRIVER      +idx] = pdriver;
                 nodesG2vars[G2nodesNumber*DRIVER_AUX  +idx] = pdriver_aux;
+                nodesG2vars[G2nodesNumber*DRIVER_CROSS+idx] = driver_cross;
+                nodesG2vars[G2nodesNumber*DRIVER_DIAG +idx] = driver_diag;
+                nodesG2vars[G2nodesNumber*RESISTIVITY +idx] = resistivity;
+                
                 
                 SHIFT_MAIN_DENS = NUM_OF_MAIN_G2VARS;
                 SHIFT_MAIN_DENS_AUX  = SHIFT_MAIN_DENS+numOfSpecies;
@@ -1224,15 +1233,15 @@ void GridManager::smooth(int varName){
     
     double* varValues = new double[totG4*varDim*sizeof(double)];
     
-    for ( idxG4 = 0; idxG4 < totG4; idxG4++ ){
-        for (int dim=0;dim<varDim;dim++) {
+    for( idxG4 = 0; idxG4 < totG4; idxG4++ ){
+        for (int dim = 0; dim < varDim; dim++) {
             varValues[varDim*idxG4+dim] = 0.0;
         }
     }
     
-    for( i=0; i < xResG2; i++ ){
-        for( j=0; j < yResG2; j++ ){
-            for( k=0; k < zResG2; k++ ){
+    for( i= 0 ; i < xResG2; i++ ){
+        for( j = 0; j < yResG2; j++ ){
+            for( k = 0; k < zResG2; k++ ){
                 idx   = IDX(i  ,j  ,k  ,xResG2,yResG2,zResG2);
                 idxG4 = IDX(i+1,j+1,k+1,xResG4,yResG4,zResG4);
                 vectorVar = nodesG2vars[varShift+idx]->getValue();
@@ -1563,7 +1572,7 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     result.reserve(xRes*yRes*zRes);
     int i,j,k;
     
-    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO};
+    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO, DRIVER_CROSS, DRIVER_DIAG, RESISTIVITY};
     int numOfSpecies = loader->getNumberOfSpecies();
     
     for( i = 0; i < numOfSpecies; i++ ){
@@ -1583,6 +1592,7 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
                     allVars.push_back(*nodesG2vars[G2nodesNumber*varN+idxG2]);
                 }
                 allVars.push_back(*nodesG1vars[G1nodesNumber*MAGNETIC+idxG1]);
+                allVars.push_back(*nodesG2vars[G2nodesNumber*RESISTIVITY+idxG2]);
                 result.push_back(allVars);
             }
         }
