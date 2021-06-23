@@ -10,20 +10,20 @@ class Initializer:
         # BOX
         self.dim=3
         
-        self.boxSize    = [25.0, 25.0, 25.0] # in d0 - ion inertia length
-        self.boxSizePxl = [25,  25 , 25]
+        self.boxSize    = [40.0, 40.0, 25.0] # in d0 - ion inertia length
+        self.boxSizePxl = [40,  40 , 25]
         
         self.bcType = [0,1,0] #1 - periodic 0 - damping layer
         
         self.partclBcType = [0,1,0] #1 - periodic 0 - outflow
         
-        self.mpiCores  = [1,1,2]
+        self.mpiCores  = [2,1,1]
         
-        self.dampingBoundaryWidth = [[10,10], [0,0], [4,10]]
+        self.dampingBoundaryWidth = [[5,5], [5,5], [4,10]]
         
         # time
         self.ts = 0.01
-        self.maxtsnum =1501
+        self.maxtsnum =1001
         self.outputStride = 100
         
         # output. need to create it before
@@ -37,8 +37,8 @@ class Initializer:
         self.numOfSpecies = 2
         self.masses  = [1, 1]
         self.charges = [1, 1]
-        self.ppc4load = 100
-        self.dens = [self.ppcMinDens, 1.0]
+        self.ppc4load = 20
+        self.dens = [self.ppcMinDens, 5.0]
         self.vel1 = 0.01
         self.vel2 = 0.00001
         
@@ -50,8 +50,8 @@ class Initializer:
         self.spotPos = [[0.5*self.boxSize[0], 0.5*self.boxSize[1], self.surface_pos-4]]
         
         
-        self.radius1 = 5.0
-        self.radius2 = 5.0
+        self.radius1 = 10.0
+        self.radius2 = 10.0
         self.radius3 = 2.0
         
         self.type2Load = 2
@@ -59,14 +59,14 @@ class Initializer:
         
         self.rate2heat = 1.0
         
-        self.dens2sustain = 1.0
+        self.dens2sustain = self.dens[1]
         self.temp2sustain = 10.0
         
         #magnetic field magnitude
         self.Bfield = [0.0, 0.0, 0.0]
         
         #ohm's law
-        self.resistivity = 0.0
+        self.resistivity = 0.5
         
         # pressure tensor
         self.emass = 0.1
