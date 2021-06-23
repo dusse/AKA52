@@ -35,6 +35,9 @@ enum G2VAR{
     PRESSURE_SMO,
     DRIVER,
     DRIVER_AUX,
+    DRIVER_CROSS,
+    DRIVER_DIAG,
+    RESISTIVITY,
     SIZEG2
 };
 

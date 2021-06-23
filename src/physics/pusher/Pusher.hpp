@@ -30,6 +30,7 @@ private:
     double* weights;
     double* charges;
     double* masses;
+    int* iffrozens;
     
     int totinBoxInit = 0;
     int totalNum;
@@ -45,7 +46,7 @@ private:
     
     void performSorting();
     
-    void reallocateParticles();
+    void reallocateParticles(int);
     
 public:
     Pusher(std::shared_ptr<Loader>,
@@ -64,7 +65,8 @@ public:
     void setParticleWeight4Type(int, double);
     void setParticleCharge4Type(int, double);
     void setParticleMass4Type(int, double);
-    void initParticles(int,int);
+    void setIfParticleTypeIsFrozen(int, int);
+    void initParticles(int, int);
     void addParticles(std::vector<std::shared_ptr<Particle>>);
     
     void setParticlePosition(int, double[6]);

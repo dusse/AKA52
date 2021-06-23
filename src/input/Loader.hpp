@@ -49,7 +49,7 @@ private:
     std::string callPyStringFunction( PyObject*, const std::string, const std::string );
     
     double callPyFloatFunctionWith3args( PyObject*, const std::string,
-                                        const std::string, double x,double y,double z );
+                                        const std::string, double, double, double );
     
     PyObject * getPyMethod( PyObject*, const std::string, const std::string );
     
@@ -75,7 +75,7 @@ public:
     double boxSizes[3];
     double spatialSteps[3];
     
-    double hyperviscosity;
+    double resistivity;
 
     double minimumDens2ResolvePPC;
     
@@ -108,18 +108,24 @@ public:
     double getTargetIonDensityProfile(double,double,double);
     double getElectronPressureProfile(double,double,double);
     
+    double getDensity(double,double,double,int);
     std::vector<double> getVelocity(double,double,double,int);
     std::vector<double> getBfield(double,double,double);
-    double getDensity(double,double,double,int);
+   
+    
     double getTimeStep();
     int getMaxTimestepsNum();
     int getNumberOfSpecies();
     int getTimestepsNum2Write();
-    double getMass4spieceies(int);
-    double getCharge4spieceies(int);
-    double getParticlesPerCellNumber();
+    
+    double getPPC4species(int);
+    double getMass4species(int);
+    double getCharge4species(int);
+    int getIfSpeciesFrozen(int);
+    
     std::string getOutputDir() const;
     std::string getFilenameTemplate();
+    
     PyObject * getPythonClassInstance(std::string className);
 };
 #endif /* Loader_hpp */

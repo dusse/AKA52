@@ -92,9 +92,10 @@ void ModelInitializer::readAllFromFile(){
     
     double* weights = new double[coresNum];
     
-    for(int spn = 0; spn<numOfSpecies;spn++){
-        pusher->setParticleMass4Type(spn, loader->getMass4spieceies(spn));
-        pusher->setParticleCharge4Type(spn, loader->getCharge4spieceies(spn));
+    for( int spn = 0; spn < numOfSpecies; spn++ ){
+        pusher->setParticleMass4Type(spn, loader->getMass4species(spn));
+        pusher->setParticleCharge4Type(spn, loader->getCharge4species(spn));
+        pusher->setIfParticleTypeIsFrozen(spn, loader->getIfSpeciesFrozen(spn));
         
         readField(group, ("weight_"+to_string(spn)).c_str(), H5T_NATIVE_DOUBLE, file,
                   memspaceAttr, weights);
@@ -107,12 +108,12 @@ void ModelInitializer::readAllFromFile(){
     hsize_t memspace ;
     hsize_t locOffset = g2offset[rank];
     
-    for ( int varN=0; varN<totVarsOnG2; varN++){
+    for ( int varN = 0; varN < totVarsOnG2; varN++ ){
         VectorVar** vars = gridMng->getVectorVariableOnG2(varN);
         int varSize = vars[0]->getSize();
         
         double* field = new double[g2nodes[rank]];
-         for ( int dir=0; dir<varSize; dir++){
+         for ( int dir = 0; dir < varSize; dir++ ){
              
             hid_t data = H5Dopen(group, ("g2_"+to_string(varN)+"_"+to_string(dir)).c_str(), H5P_DEFAULT);
             hid_t dataspace = H5Dget_space(data);
@@ -120,7 +121,7 @@ void ModelInitializer::readAllFromFile(){
             memspace  = H5Screate_simple(1, &loc , NULL);
             H5Dread(data, H5T_NATIVE_DOUBLE, memspace, dataspace, H5P_DEFAULT, field);
 
-            for ( idx=0; idx<g2nodes[rank]; idx++){
+            for ( idx = 0; idx < g2nodes[rank]; idx++ ){
                  gridMng->setVectorVariableForNodeG2(idx, varN, dir, field[idx]);
             }
              
@@ -269,6 +270,7 @@ void ModelInitializer::initVariablesonG2(){
     
     double G2shift = 0.5;
     int numOfSpecies = loader->getNumberOfSpecies();
+    
     double densTot = 0.0, densTotLoc = 0.0, dens = 0.0, pres;
     int i,j,k,idx, spn;
     vector<double> densDomain;
@@ -285,6 +287,14 @@ void ModelInitializer::initVariablesonG2(){
         locMAX4species.push_back(0.0);
         prtcleWeight.push_back(0.0);
         npc.push_back(0);
+    }
+    
+    int type2load = loader->prtclType2Load;
+    
+    // last element is reserved for loaded particles
+    // -1 because there is no need to initialize zero number of loaded particles
+    if ( loader->numOfSpots > 0 ) {
+        numOfSpecies -= 1;
     }
     
     for( i = 0; i < xRes; i++ ){
@@ -304,9 +314,21 @@ void ModelInitializer::initVariablesonG2(){
                     // need only for particles initialization
                     // density is managed by HydroManager.cpp
                     // no need in boundary MPI communication
-                    gridMng->setVectorVariableForNodeG2(idx, gridMng->DENS_VEL(spn), 0, dens);
                     
-                    densDomain[spn] += dens;
+                    if( loader->numOfSpots > 0 && spn == type2load){// replace particles by special type for loaded
+                        double pres = loader->getElectronPressureProfile(x,y,z);
+                        if( pres > 0.0 ){
+                            gridMng->setVectorVariableForNodeG2(idx, gridMng->DENS_VEL(numOfSpecies), 0, dens);
+                            densDomain[numOfSpecies] += dens;
+                        }else{
+                            gridMng->setVectorVariableForNodeG2(idx, gridMng->DENS_VEL(spn), 0, dens);
+                            densDomain[spn] += dens;
+                        }
+                    }else{
+                        gridMng->setVectorVariableForNodeG2(idx, gridMng->DENS_VEL(spn), 0, dens);
+                        densDomain[spn] += dens;
+                    }
+                    
                     densTotLoc += dens;
                     if( dens < locMIN4species[spn] ){
                         locMIN4species[spn] = dens;
@@ -327,12 +349,18 @@ void ModelInitializer::initVariablesonG2(){
     
     double localMinimumDens, localMaximumDens;
     int nonemptyCellLoc, nonemptyCellGlob;
-    int ppc = loader->getParticlesPerCellNumber();
     int partclNumPerDomain;
     double globalMaximumDens;
+    
+    if ( loader->numOfSpots > 0 ) {
+        numOfSpecies += 1;// set back normal value
+    }
+    
+    
     int sum = 0;
     for( spn = 0; spn < numOfSpecies; spn++ ){
         
+        // need this routine for non uniform plasma distribution
         localMinimumDens = locMIN4species[spn];
         MPI_Allreduce(&localMinimumDens, &globalMinimumDens, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
         localMaximumDens = locMAX4species[spn];
@@ -346,7 +374,20 @@ void ModelInitializer::initVariablesonG2(){
             globalMinimumDens = loader->minimumDens2ResolvePPC;
         }
         
+        int ppc = loader->getPPC4species(spn);
         prtcleWeight[spn] = globalMinimumDens/ppc;
+        
+        if ( (loader->numOfSpots > 0) && (spn == (numOfSpecies-1)) ) {
+            
+            int type2load = loader->prtclType2Load;
+            int ppc4loadedType = loader->getPPC4species(type2load);
+            
+            const double weightDecreaseFactor = double(ppc4loadedType)/double(ppc);
+            
+            double loadWeight = weightDecreaseFactor*prtcleWeight[type2load];
+            
+            prtcleWeight[spn] = loadWeight;
+        }
         
         partclNumPerDomain = int(densDomain[spn]/prtcleWeight[spn]);
         npc[spn] = partclNumPerDomain;
@@ -372,7 +413,10 @@ void ModelInitializer::initVariablesonG2(){
                           +"\n"+string( 17, ' ' )+" globalMinimumDens  = "+to_string(globalMinimumDens)
                           +"\n"+string( 17, ' ' )+" globalMaximumDens  = "+to_string(globalMaximumDens)
                           +"\n"+string( 17, ' ' )+" localMinimumDens  = "+to_string(localMinimumDens)
-                          +"\n"+string( 17, ' ' )+" localMaximumDens  = "+to_string(localMaximumDens)).c_str(),  DEBUG);
+                          +"\n"+string( 17, ' ' )+" localMaximumDens  = "+to_string(localMaximumDens)
+                          +"\n"+string( 17, ' ' )+" localMaximumDens  = "+to_string(localMaximumDens)
+                          +"\n"+string( 17, ' ' )+" densDomain  = "+to_string(densDomain[spn])
+                          +"\n"+string( 17, ' ' )+" ppc  = "+to_string(ppc)).c_str(),  DEBUG);
     }
     totParticleNumberInDomain = sum;
     MPI_Allreduce(&densTot, &totalDensityInTHEbox, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -408,7 +452,6 @@ void ModelInitializer::initParticles(){
     vector<double> vel;
     double r1, r2;
     
-    int ppc = loader->getParticlesPerCellNumber();
     
     if( totParticleNumberInDomain <= 0 ){
         throw runtime_error("Check initialization, particles number in domain = "
@@ -430,12 +473,31 @@ void ModelInitializer::initParticles(){
     map<int, VectorVar**> dens;
     
     for( spn = 0; spn < numOfSpecies; spn++ ){
-        pusher->setParticleMass4Type(spn, loader->getMass4spieceies(spn));
-        pusher->setParticleCharge4Type(spn, loader->getCharge4spieceies(spn));
+        
+        if ( (loader->numOfSpots > 0) && (spn == (numOfSpecies-1)) ) {
+            int type2load = loader->prtclType2Load;
+            double loadMass = pusher->getParticleMass4Type(type2load);
+            double loadCharge = pusher->getParticleCharge4Type(type2load);
+            // last element is reserved for loaded particles
+            pusher->setParticleMass4Type(spn, loadMass);
+            pusher->setParticleCharge4Type(spn, loadCharge);
+        }else{
+            pusher->setParticleMass4Type(spn, loader->getMass4species(spn));
+            pusher->setParticleCharge4Type(spn, loader->getCharge4species(spn));
+            pusher->setIfParticleTypeIsFrozen(spn, loader->getIfSpeciesFrozen(spn));
+        }
+        
         pusher->setParticleWeight4Type(spn, prtcleWeight[spn]);
         dens[spn] = gridMng->getVectorVariableOnG2(gridMng->DENS_VEL(spn));
     }
-
+    
+   
+    vector<int> ppcValues;
+    for( spn = 0; spn < numOfSpecies; spn++ ){
+        int ppc = loader->getPPC4species(spn);
+        ppcValues.push_back(ppc);
+    }
+    
     double requiredPrtclNum;
     
     int i, j, k;
@@ -445,16 +507,26 @@ void ModelInitializer::initParticles(){
                 
                 idxOnG2 = IDX(i+1, j+1, k+1, xRes+2, yRes+2, zRes+2);
                 
-                for(spn = 0; spn<numOfSpecies; spn++){
+                for( spn = 0; spn < numOfSpecies; spn++ ){
                     
                     requiredPrtclNum = int(dens[spn][idxOnG2]->getValue()[0]/
                                            pusher->getParticleWeight4Type(spn));
                     
+                    
                     for (ptclIDX=0; ptclIDX < requiredPrtclNum; ptclIDX++){
+                        
                         double ran1, ran2, ran3;
-                        ran1 = RNM;
-                        ran2 = RNM;
-                        ran3 = RNM;
+                        
+                        if( ppcValues[spn] == 1 ){
+                            ran1 = 0.5;// put at the cell center
+                            ran2 = 0.5;
+                            ran3 = 0.5;
+                        }else{
+                            ran1 = RNM;
+                            ran2 = RNM;
+                            ran3 = RNM;
+                        }
+
                         ran1 = ran1 == 1.0 ? 1-EPS4 : ran1;
                         ran2 = ran2 == 1.0 ? 1-EPS4 : ran2;
                         ran3 = ran3 == 1.0 ? 1-EPS4 : ran3;
@@ -463,12 +535,12 @@ void ModelInitializer::initParticles(){
                         pos[1] = (j + ran2) * cellSizeY + domainShiftY;
                         pos[2] = (k + ran3) * cellSizeZ + domainShiftZ;
                         
-                        if(particle_idx >= totalPrtclNumber){
+                        if( particle_idx >= totalPrtclNumber ){
                             string msg0011 ="[ModelInitializer] idx is out of preinitialized particles number: particle_idx  = "+to_string(particle_idx);
                             logger->writeMsg(msg0011.c_str(),  DEBUG);
                         }
                         
-                        if( pos[0] < 0.0 || pos[1] < 0.0 || pos[2] < 0.0){
+                        if( pos[0] < 0.0 || pos[1] < 0.0 || pos[2] < 0.0 ){
                             throw runtime_error("position pos[0] = "+to_string(pos[0]));
                         }
                         double pos2Save[6] = {pos[0], pos[1], pos[2], pos[0], pos[1], pos[2]};
@@ -505,7 +577,7 @@ void ModelInitializer::initParticles(){
         }
     }
     pusher->setTotalParticleNumber(particle_idx);
-    
+
     logger->writeMsg("[ModelInitializer] init particles...OK", DEBUG);
 }
 
