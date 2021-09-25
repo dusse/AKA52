@@ -50,7 +50,7 @@ void LaserMockManager::initialize(){
     double dz = loader->spatialSteps[2];
     
     double energyOnDomain = 0.0;
-    double G2shift = 0.5;
+    double G2shift = -0.5;// symmetry requirement
     double x,y,z;
     int i,j,k;
     for( i = 0; i < xRes+1; i++){
