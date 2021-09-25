@@ -18,7 +18,7 @@ LD_LIBRARY_PATH=$(HDF5_PATH)/lib/:$(PYTHON27_LIB)
 export LIBRARY_PATH=$LIBRARY_PATH:$(LD_LIBRARY_PATH)
 
 CXX = $(MPI_PATH)/bin/mpicxx
-CXXFLAGS  = -O3 -Wall -c -std=c++11 -Wno-sign-compare -Wno-unused-variable
+CXXFLAGS  = -Wall -c -std=c++11 -Wno-sign-compare -Wno-unused-variable
 
 _SRCS =  $(DSRC)/core/SimulationManager.cpp \
                $(DSRC)/grid/GridManager.cpp \
