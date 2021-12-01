@@ -18,6 +18,8 @@ LaserMockManager::LaserMockManager(std::shared_ptr<Loader> ldr,
 LaserMockManager::~LaserMockManager(){
     delete[] electronPressureProfile;
     delete[] targetIonDensityProfile;
+    delete[] ionThermalVelocityProfile;
+    delete[] ionFluidVelocityProfile;
 }
 
 
@@ -32,13 +34,17 @@ void LaserMockManager::initialize(){
     
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     
-    int nG2= xResG2*yResG2*zResG2;
+    int nG2 = xResG2*yResG2*zResG2;
     
     electronPressureProfile = new double[nG2*sizeof(double)];
     targetIonDensityProfile = new double[nG2*sizeof(double)];
-    
+    ionThermalVelocityProfile = new double[nG2*3*sizeof(double)];
+    ionFluidVelocityProfile = new double[nG2*3*sizeof(double)];
+
     double pres, dens;
-    
+    vector<double> fluidVel;
+    vector<double> thermalVel;
+
     int idx, idxOnG2;
     
     double domainShiftX = loader->boxCoordinates[0][0];
@@ -52,7 +58,7 @@ void LaserMockManager::initialize(){
     double energyOnDomain = 0.0;
     double G2shift = -0.5;// symmetry requirement
     double x,y,z;
-    int i,j,k;
+    int i,j,k,n;
     for( i = 0; i < xRes+1; i++){
         for( j = 0; j < yRes+1; j++) {
             for( k = 0; k < zRes+1; k++){
@@ -73,6 +79,13 @@ void LaserMockManager::initialize(){
                 
                 targetIonDensityProfile[idxOnG2] = dens;
                 
+                thermalVel = loader->getVelocity4InjectedParticles(x, y, z);
+                fluidVel = loader->getFluidVelocity4InjectedParticles(x, y, z);
+
+                for( n = 0; n < 3; n++ ){
+                    ionThermalVelocityProfile[3*idxOnG2+n] = thermalVel[n];
+                    ionFluidVelocityProfile[3*idxOnG2+n] = fluidVel[n];
+                }                
             }
         }
     }
@@ -101,13 +114,8 @@ void LaserMockManager::addIons(){
         yRes = loader->resolution[1],
         zRes = loader->resolution[2];
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
-    
-    
-    double mass = pusher->getParticleMass4Type(PARTICLE_TYPE2LOAD);
-    double vth  = sqrt(loader->prtclTemp2Load/mass);
-    
+        
     int i,j,k;
-    double vel[3] = {vth, vth, vth};
     double vpb[3] = {0.0, 0.0, 0.0};
     double pos[3] = {0.0, 0.0, 0.0};
     
@@ -169,17 +177,18 @@ void LaserMockManager::addIons(){
                     r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
                     r1   = (r1 > EPS8)? r1 : r1 + EPS8;
                     r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                    vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2);
-                    vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2);
-                        
+                    vpb[0] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+0]*cos(2*PI*r2);
+                    vpb[0]+= ionFluidVelocityProfile[3*idxOnG2+0];
+                    vpb[1] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+1]*sin(2*PI*r2);
+                    vpb[1]+= ionFluidVelocityProfile[3*idxOnG2+1];                        
                     r1 = RNM;
                     r2 = RNM;
                     r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
                     r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
                     r1   = (r1 > EPS8)? r1 : r1 + EPS8;
                     r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                    vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2);
-                        
+                    vpb[2] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+2]*cos(2*PI*r2);
+                    vpb[2]+= ionFluidVelocityProfile[3*idxOnG2+2];                         
                         
                     double vel2Save[6] = {vpb[0], vpb[1], vpb[2],
                                           vpb[0], vpb[1], vpb[2]};
@@ -237,13 +246,10 @@ void LaserMockManager::accelerate(int i_time){
                 
                 idxOnG2 = IDX(i  , j  , k  , xResG2, yResG2, zResG2);
                 
-                double pres = electronPressureProfile[idxOnG2];
-                double rate = loader->pressureIncreaseRate;
-                double pres2set = pres*rate;
+                double pres2set = electronPressureProfile[idxOnG2];
                 gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 0, pres2set);
                 gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 3, pres2set);
-                gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 5, pres2set);
-                
+                gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 5, pres2set);                
             }
         }
     }

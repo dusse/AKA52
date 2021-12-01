@@ -31,7 +31,7 @@ void Writer::write(int fileNum){
     int totalNodeNum = subdomainXSize*subdomainYSize*subdomainZSize;
     int ijNode;
     vector<vector<VectorVar>> vectorVars = gridMgr->getVectorVariablesForAllNodes();
-    
+    vector<string> humanReadableNames = gridMgr->getHumanReadableOutputVarNames();
     
     MPI_Info info = MPI_INFO_NULL;
     
@@ -53,7 +53,7 @@ void Writer::write(int fileNum){
         int varDim = vectorVars[0][idx_var].getSize();
         for (int dir = 0; dir < varDim; dir++) {
             
-            string varName = to_string(idx_var)+"_"+to_string(dir);
+	    string varName  = humanReadableNames[idx_var] +"_"+ to_string(dir);
             double* var = new double[totalNodeNum];
             
             for (ijNode = 0; ijNode < totalNodeNum; ijNode++) {

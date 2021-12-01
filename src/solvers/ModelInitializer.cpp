@@ -91,7 +91,7 @@ void ModelInitializer::readAllFromFile(){
     pusher->initParticles(parts[rank], numOfSpecies);
     
     double* weights = new double[coresNum];
-    
+    //TODO check for injected particles case
     for( int spn = 0; spn < numOfSpecies; spn++ ){
         pusher->setParticleMass4Type(spn, loader->getMass4species(spn));
         pusher->setParticleCharge4Type(spn, loader->getCharge4species(spn));
@@ -268,7 +268,7 @@ void ModelInitializer::initVariablesonG2(){
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     double x,y,z;
     
-    double G2shift = 0.5;
+    double G2shift = 0.5;// need for symmetry
     int numOfSpecies = loader->getNumberOfSpecies();
     
     double densTot = 0.0, densTotLoc = 0.0, dens = 0.0, pres;
@@ -362,9 +362,9 @@ void ModelInitializer::initVariablesonG2(){
         
         // need this routine for non uniform plasma distribution
         localMinimumDens = locMIN4species[spn];
-        MPI_Allreduce(&localMinimumDens, &globalMinimumDens, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
+        MPI_Allreduce(&localMinimumDens, &globalMinimumDens, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
         localMaximumDens = locMAX4species[spn];
-        MPI_Allreduce(&localMaximumDens, &globalMaximumDens, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+        MPI_Allreduce(&localMaximumDens, &globalMaximumDens, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         
         if( globalMinimumDens <= 0.0 ){
             globalMinimumDens = localMaximumDens > 0.0 ? localMaximumDens : globalMaximumDens;
@@ -398,11 +398,12 @@ void ModelInitializer::initVariablesonG2(){
         double globWeightMax;
         double globWeightMin;
         
-        MPI_Allreduce(&localWeight, &globWeightMin, 1, MPI_DOUBLE_INT, MPI_MINLOC, MPI_COMM_WORLD);
-        MPI_Allreduce(&localWeight, &globWeightMax, 1, MPI_DOUBLE_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+        MPI_Allreduce(&localWeight, &globWeightMin, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+        MPI_Allreduce(&localWeight, &globWeightMax, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         
         if( globWeightMax != globWeightMin ){
-            throw runtime_error(" Different particle weight on different domains!");
+            throw runtime_error(" Different particle weight on different domains! (type="+to_string(spn)+") max = "
+                                                            +to_string(globWeightMax)+" min = "+to_string(globWeightMin));
         }
 
         
@@ -450,6 +451,7 @@ void ModelInitializer::initParticles(){
     int particle_idx=0, idxOnG2, idx, ptclIDX, spn;
     double pos[3], vpb[3];
     vector<double> vel;
+    vector<double> fluidVel;
     double r1, r2;
     
     
@@ -536,7 +538,7 @@ void ModelInitializer::initParticles(){
                         pos[2] = (k + ran3) * cellSizeZ + domainShiftZ;
                         
                         if( particle_idx >= totalPrtclNumber ){
-                            string msg0011 ="[ModelInitializer] idx is out of preinitialized particles number: particle_idx  = "+to_string(particle_idx);
+                            string msg0011 ="[ModelInitializer] idx is out of preinitialized particles number: particle_idx = "+to_string(particle_idx);
                             logger->writeMsg(msg0011.c_str(),  DEBUG);
                         }
                         
@@ -548,7 +550,13 @@ void ModelInitializer::initParticles(){
                         
                         pusher->setParticleType(particle_idx,  spn);
 
-                        vel = loader->getVelocity(pos[0], pos[1], pos[2], spn);
+ 			if ( (loader->numOfSpots > 0) && (spn == (numOfSpecies-1)) ) {
+			    vel      = loader->getVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
+			    fluidVel = loader->getFluidVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
+                   	}else{
+			    vel      = loader->getVelocity(pos[0], pos[1], pos[2], spn);
+			    fluidVel = loader->getFluidVelocity(pos[0], pos[1], pos[2], spn);
+			}
                     
                         r1 = RNM;
                         r2 = RNM;
@@ -556,8 +564,8 @@ void ModelInitializer::initParticles(){
                         r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
                         r1   = (r1 > EPS8)? r1 : r1 + EPS8;
                         r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                        vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2);
-                        vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2);
+                        vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2)+fluidVel[0];
+                        vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2)+fluidVel[1];
                     
                         r1 = RNM;
                         r2 = RNM;
@@ -565,7 +573,7 @@ void ModelInitializer::initParticles(){
                         r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
                         r1   = (r1 > EPS8)? r1 : r1 + EPS8;
                         r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                        vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2);
+                        vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2)+fluidVel[2];
                         
                         double vel2Save[6] = {vpb[0], vpb[1], vpb[2], vpb[0], vpb[1], vpb[2]};
                         pusher->setParticleVelocity(particle_idx, vel2Save);

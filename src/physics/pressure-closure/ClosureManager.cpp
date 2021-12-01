@@ -255,6 +255,11 @@ void ClosureManager::initPressure(){
 
 
 void ClosureManager::calculatePressure(int phase, int i_time){
+
+        if( loader->useIsothermalClosure == 1 ){
+		calculateIsothermalPressure();
+		return;
+	}
     
 #ifdef IMPLICIT_PRESSURE
         implicitPressure(phase, i_time) ;
@@ -262,6 +267,36 @@ void ClosureManager::calculatePressure(int phase, int i_time){
         subCycledPressure(phase, i_time) ;
 #endif
 
+}
+
+void ClosureManager::calculateIsothermalPressure(){
+
+    auto start_time = high_resolution_clock::now();
+    
+    int xRes = loader->resolution[0];
+    int yRes = loader->resolution[1];
+    int zRes = loader->resolution[2];
+    int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
+    int nG2 = xResG2*yResG2*zResG2;
+
+    double pressure = 0.0;
+    double Tele = loader->electronTemperature;
+    double dens = 0.0;
+
+    VectorVar** density  = gridMgr->getVectorVariableOnG2(DENSELEC);
+
+    for(int ijkG2 = 0; ijkG2 < nG2; ijkG2++ ){
+	dens = density[ijkG2]->getValue()[0];
+	pressure = dens*Tele;
+        gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, 0, pressure);
+	gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, 3, pressure);
+	gridMgr->setVectorVariableForNodeG2(ijkG2, PRESSURE_SMO, 5, pressure);
+    }
+
+    auto end_time = high_resolution_clock::now();
+    string msgend ="[ClosureManager] calculateIsothermalPressure() total duration = "+
+    to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
+    logger->writeMsg(msgend.c_str(), DEBUG);
 }
 
 

@@ -44,7 +44,9 @@ private:
     
     void transformMatrix(double[3][3], double[3][3], double[3][3], int);
     void ortho(double[3], double[3][3]);
-    
+
+    void calculateIsothermalPressure();
+
 public:
     ClosureManager(std::shared_ptr<Loader>, std::shared_ptr<GridManager>);
     ~ClosureManager();

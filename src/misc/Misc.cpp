@@ -18,7 +18,7 @@ void crossProd(double A[3], double B[3], double cross[3]){
 
 double edgeProfile(double dens){
     
-    double const densLow  = 0.0000001;
+    double const densLow  = 0.000001;
     double const densHigh = 0.1;
     
     double x = (dens-densLow)/(densHigh-densLow)-1;
@@ -40,6 +40,27 @@ double edgeProfile(double dens){
 #endif
     
 }
+
+double edgeProfilePressure(double pres){
+    
+    double const presLow  = 0.001;
+    double const presHigh = 10.0;
+    
+    double x = (pres-presLow)/(presHigh-presLow)-1;
+    
+    if (x < -1.0) { x = -1.0; }
+    else if (x > 0.0) { x = 0.0; }
+    
+    double modX = fabs(x);
+    
+    double res = -6.0*modX*modX*modX*modX*modX
+    +15.0*x*x*x*x
+    -10.0*modX*modX*modX
+    +1;
+    
+    return res;    
+}
+
 
 double polynomByRoch(double val){
     

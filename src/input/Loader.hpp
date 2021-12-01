@@ -4,9 +4,11 @@
 #include <Python.h>
 #include <mpi.h>
 #include <stdio.h>
+#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <set>
 #include <math.h>
 #include "../misc/Logger.hpp"
 #include "../misc/Misc.hpp"
@@ -29,6 +31,8 @@ enum ParticleBCtype{
     REFLECT_BC
 };
 
+#define METHOD_OK   0
+#define METHOD_FAIL 1
 
 class Loader{
     
@@ -38,9 +42,10 @@ private:
     int numOfSpecies;
     int maxTimestepsNum;
     int timestepsNum2Write;
-    int ppc;
     std::string outputDir;
     std::string fileNameTemplate;
+    std::set<std::string> checkedMethods;
+    std::set<std::string> failMethods;
     
     PyObject *pInstance;
     
@@ -54,8 +59,9 @@ private:
     PyObject * getPyMethod( PyObject*, const std::string, const std::string );
     
     void initMPIcoordinatesOfDomains( int, int[3] );
+    int checkMethodExistence(const std::string, const std::string);
 
-    
+
 public:
     int runType;
     std::string inputfile;
@@ -78,6 +84,9 @@ public:
     double resistivity;
 
     double minimumDens2ResolvePPC;
+
+    int useIsothermalClosure = 0;
+    double electronTemperature = 0.0;
     
     int smoothStride;
     double electronmass;
@@ -90,8 +99,6 @@ public:
     //laser staff
     int numOfSpots = 0;
     int prtclType2Load;
-    double prtclTemp2Load;
-    double pressureIncreaseRate;
     int laserPulseDuration_tsnum;
     double loadedEnergyPerStep = 0.0;
     
@@ -112,7 +119,9 @@ public:
     std::vector<double> getVelocity(double,double,double,int);
     std::vector<double> getBfield(double,double,double);
    
-    
+    std::vector<double> getFluidVelocity(double,double,double,int);
+    std::vector<double> getFluidVelocity4InjectedParticles(double,double,double);
+    std::vector<double> getVelocity4InjectedParticles(double,double,double);
     double getTimeStep();
     int getMaxTimestepsNum();
     int getNumberOfSpecies();

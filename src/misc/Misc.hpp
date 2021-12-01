@@ -31,6 +31,8 @@ void crossProd(double[3], double[3], double[3]);
 
 double edgeProfile(double dens);
 
+double edgeProfilePressure(double pres);
+
 double polynomByRoch(double val);
 
 

@@ -30,6 +30,8 @@ private:
     
     double* electronPressureProfile;
     double* targetIonDensityProfile;
+    double* ionThermalVelocityProfile;
+    double* ionFluidVelocityProfile;
     
     
     void initialize();
