@@ -34,6 +34,7 @@ private:
 public:
     HydroManager(std::shared_ptr<Loader>, std::shared_ptr<GridManager>, std::shared_ptr<Pusher>);
     void gatherMoments(int);
+    void setIonPressureTensor();
     
 
 };

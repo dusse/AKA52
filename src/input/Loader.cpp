@@ -19,12 +19,12 @@ const string  GET_TIMESTEP_WRITE = "getOutputTimestep";
 const string  GET_OUTPUT_DIR = "getOutputDir";
 const string  GET_FILENAME_TEMPLATE = "getOutputFilenameTemplate";
 const string  GET_DENSITY = "getDensity";
-const string  GET_NUM_OF_PARTICLES = "getParticlesPerCellNumber";
 const string  GET_BFIELD   = "getBfield";
 const string  GET_ELEPRES  = "getElectronPressure";
 const string  GET_PRESSURE_SMOOTH_STRIDE = "getElectronPressureSmoothingStride";
 const string  GET_VELOCITY = "getVelocity";
-
+const string  GET_FLUID_VELOCITY = "getFluidVelocity";
+const string  INJECTED_PARTICLES = "4InjectedParticles";
 const string  GET_MASS   = "getMass";
 const string  GET_CHARGE = "getCharge";
 const string  GET_IFPARTICLETYPEISFROZEN = "getIfParticleTypeIsFrozen";
@@ -53,14 +53,15 @@ const string  GET_BFIELD_LIMIT    = "getBfieldLimit";
 const string  GET_ELECTRON_MASS  = "getElectronMass";
 const string  GET_RELAX_FACTOR   = "getRelaxFactor";
 
+const string  IF2USE_ISOTHERMAL_CLOSURE = "getIfWeUseIsothermalClosure";
+const string  GET_FIXED_ELECTRON_TEMPERATURE = "getElectronTemperature4IsothermalClosure";
+
 const string  GET_CELL_BREAKDOWN_EFIELD_FACTOR  = "getCellBreakdownEfieldFactor";
 const string  GET_CRITICAL_PRESSURE   = "getCriticalPressure";
 
 const string  NUMBER_OF_LASER_SPOTS = "getNumberOfLaserSpots";
 
 const string  PARTICLE_TYPE2LOAD = "getParticleType2Load";
-const string  PARTICLE_TEMP2LOAD = "getParticleTemp2Load";
-const string  PRESSURE_INCREASE_RATE = "getPressureIncreaseRate";
 
 const string  GET_LASER_PULSE_DURATION = "getLaserPulseDuration";
 
@@ -78,6 +79,10 @@ PyObject * Loader::getPythonClassInstance(string className){
     string msg = "[Loader] Start to instantiate the Python class " + className;
     logger.writeMsg(msg.c_str(), DEBUG);
     
+    string inputFilePath = string(getenv("PYTHONPATH"))+ INIT_CLASS_NAME + ".py";
+    string introMsg = "[Loader] used input file is " + inputFilePath;
+    logger.writeMsg(introMsg.c_str(), INFO);
+
 #if PY_MAJOR_VERSION >= 3
     pName = PyUnicode_FromString(className.c_str());
 #else
@@ -119,23 +124,35 @@ double Loader::callPyFloatFunction( PyObject* instance,
                                     const string funcName,
                                     const string brackets){
 
-        return PyFloat_AsDouble(getPyMethod(instance,funcName,brackets));
+    if (checkMethodExistence(funcName, brackets) == METHOD_OK){
+        return  PyFloat_AsDouble(getPyMethod(instance,funcName,brackets));
+    }else{
+ 	return 0.0;
+    }
 }
 
 double Loader::callPyFloatFunctionWith3args( PyObject* instance,
                                             const string funcName,
                                             const string brackets,
                                             double x,double y,double z){
-    
-    return PyFloat_AsDouble(PyObject_CallMethod(instance,strdup(funcName.c_str()),
+
+    if (checkMethodExistence(funcName, brackets) == METHOD_OK){
+        return  PyFloat_AsDouble(PyObject_CallMethod(instance,strdup(funcName.c_str()),
                                                 strdup(brackets.c_str()),x,y,z));
+    }else{
+ 	return 0.0;
+    } 
 }
 
 long Loader::callPyLongFunction( PyObject* instance,
                                 const string funcName,
                                 const string brackets){
-    
-    return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
+
+    if (checkMethodExistence(funcName, brackets) == METHOD_OK){
+        return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
+    }else{
+ 	return 0.0;
+    }    
 }
 
 
@@ -156,9 +173,45 @@ string Loader::callPyStringFunction( PyObject* instance,
 PyObject* Loader::getPyMethod(PyObject* instance,
                                const string funcName,
                                const string brackets){
-    
     return PyObject_CallMethod(instance, strdup(funcName.c_str()),
                                strdup(brackets.c_str()));
+}
+
+
+int Loader::checkMethodExistence(const string funcName, const string brackets){
+
+    if( checkedMethods.count(funcName) ){
+	return METHOD_OK;
+    }
+
+    if( failMethods.count(funcName) ){
+	return METHOD_FAIL;
+    }
+
+    string inputFilePath = string(getenv("PYTHONPATH"))+ INIT_CLASS_NAME + ".py";
+
+    ifstream inFile;
+    inFile.open(inputFilePath);
+
+    string line;
+
+    while(getline(inFile, line)) {
+        if( line.find(funcName, 0) != string::npos ){
+	   if( brackets == BRACKETS_3DOUBLE && line.find(",", 0) == string::npos ){
+		string msg = "[Loader] [METHOD SIGNATURE PROBLEM] method "+ funcName +" has inappropriate format, expected 3 doubles ";
+                logger.writeMsg(msg.c_str(), CRITICAL); 
+		throw runtime_error("METHOD SIGNATURE PROBLEM. CHECK INPUT FILE!!!");
+	   }
+	   checkedMethods.insert(funcName);
+	   return METHOD_OK;
+        }
+    }
+
+    string msg = "[Loader] [METHOD NOT FOUND] method "+ funcName +" is absent in Initializer.py. Used default value 0.";
+    logger.writeMsg(msg.c_str(), INFO); 
+    failMethods.insert(funcName);
+
+    return METHOD_FAIL;
 }
 
 /*#################################################################################################*/
@@ -237,6 +290,7 @@ void Loader::load(){
 
         Py_Initialize();
         this->pInstance = getPythonClassInstance(INIT_CLASS_NAME);
+
 
         for( int n = 0; n < 3; n++ ){
             
@@ -420,8 +474,6 @@ void Loader::load(){
     
     this->numOfSpecies          =  callPyFloatFunction( pInstance, GET_NUM_OF_SPECIES, BRACKETS );
     
-    this->ppc              = (int) callPyLongFunction( pInstance, GET_NUM_OF_PARTICLES, BRACKETS);
-    
     this->minimumDens2ResolvePPC = callPyFloatFunction( pInstance, GET_MIN_DENS_4_PPC, BRACKETS );
     
     this->maxTimestepsNum        = callPyFloatFunction( pInstance, GET_MAX_TIMESTEPS_NUM, BRACKETS );
@@ -439,6 +491,9 @@ void Loader::load(){
     this->smoothStride     = (int) callPyLongFunction( pInstance, GET_PRESSURE_SMOOTH_STRIDE, BRACKETS);
     
     this->relaxFactor            = callPyFloatFunction( pInstance, GET_RELAX_FACTOR, BRACKETS );
+
+    this->useIsothermalClosure = (int) callPyLongFunction( pInstance, IF2USE_ISOTHERMAL_CLOSURE, BRACKETS);
+    this->electronTemperature  =       callPyFloatFunction( pInstance, GET_FIXED_ELECTRON_TEMPERATURE, BRACKETS );
     
     this->numOfSpots             = callPyFloatFunction( pInstance, NUMBER_OF_LASER_SPOTS, BRACKETS );
     
@@ -449,16 +504,13 @@ void Loader::load(){
         
         this->prtclType2Load = callPyFloatFunction( pInstance, PARTICLE_TYPE2LOAD, BRACKETS );
         // -1 because in input file count starts in human manner from 1
+        // prtclType2Load is needed to define mass and charge of the injected particles
         this->prtclType2Load = this->prtclType2Load - 1;
         
         if( prtclType2Load > (numOfSpecies-1) ){
             throw runtime_error("no such particle type for loading!");
         }
-        
-        this->prtclTemp2Load = callPyFloatFunction( pInstance, PARTICLE_TEMP2LOAD, BRACKETS );
-        
-        this->pressureIncreaseRate = callPyFloatFunction( pInstance, PRESSURE_INCREASE_RATE, BRACKETS );
-        
+                
         this->laserPulseDuration_tsnum = (int) callPyLongFunction( pInstance, GET_LASER_PULSE_DURATION, BRACKETS);
     }
     
@@ -524,15 +576,12 @@ void Loader::load(){
         logger.writeMsg(msg.c_str(), INFO);
         msg = "[Loader] [COMMON] number of species = "+to_string(numOfSpecies);
         logger.writeMsg(msg.c_str(), INFO);
-        msg = "[Loader] [COMMON] ppc = "+to_string(ppc);
-        logger.writeMsg(msg.c_str(), INFO);
         msg = "[Loader] [COMMON] minimum density resolved by ppc number = "+to_string(minimumDens2ResolvePPC);
         logger.writeMsg(msg.c_str(), INFO);
         
         if( numOfSpots > 0 ){
             msg = "[Loader] [LASER] numOfSpots = "+to_string(numOfSpots)
-                    +"; prtclType2Load = "+to_string(prtclType2Load+1)
-                    +"; pressureIncreaseRate = "+to_string(pressureIncreaseRate);
+                    +"; prtclType2Load = "+to_string(prtclType2Load+1);
             logger.writeMsg(msg.c_str(), INFO);
             msg = "[Loader] [LASER] laserPulseDuration_tsnum = "+to_string(laserPulseDuration_tsnum)
             +"; laserPulseDuration_omega = "+to_string(laserPulseDuration_tsnum*timeStep);
@@ -542,26 +591,34 @@ void Loader::load(){
         
         msg = "[Loader] [OHM's LAW]: resistivity = "+to_string(resistivity);
         logger.writeMsg(msg.c_str(), INFO);
+
+	#ifdef USE_COLLISIONAL_RESIST_FACTOR
+	msg = "[Loader] [OHM's LAW]: temperature dependence (1/Te^1.5) factor for resistivity is ON";
+        logger.writeMsg(msg.c_str(), INFO);
+	#endif
         
         #ifdef USE_EDGE_FACTOR
         msg = "[Loader] [OHM's LAW]: edge factor for ohm's law terms (pressure and hall) is ON";
         logger.writeMsg(msg.c_str(), INFO);
         #endif
         
+	if( useIsothermalClosure == 1){	
+		msg = "[Loader] [PRESSURE]: you use isothermal electrons, electron temperature is "+to_string(electronTemperature);
+		logger.writeMsg(msg.c_str(), INFO);
+        }else{
         #ifdef IMPLICIT_PRESSURE
-        msg = "[Loader] [PRESSURE]: you use implicit scheme ";
+		msg = "[Loader] [PRESSURE]: you use implicit scheme ";
         #else
-        msg = "[Loader] [PRESSURE]: you use explicit (subcycling) scheme (default)";
+		msg = "[Loader] [PRESSURE]: you use explicit (subcycling) scheme (default)";
         #endif
-        logger.writeMsg(msg.c_str(), INFO);
+		logger.writeMsg(msg.c_str(), INFO);
+		msg = "[Loader] [PRESSURE]: relaxation factor = "+to_string(relaxFactor);
+		logger.writeMsg(msg.c_str(), INFO);
         
-
-        msg = "[Loader] [PRESSURE]: relaxation factor = "+to_string(relaxFactor);
-        logger.writeMsg(msg.c_str(), INFO);
-        
-        msg = "[Loader] [PRESSURE]: smoothing stride = "+to_string(smoothStride);
-        logger.writeMsg(msg.c_str(), INFO);
-        
+		msg = "[Loader] [PRESSURE]: smoothing stride = "+to_string(smoothStride);
+		logger.writeMsg(msg.c_str(), INFO);
+        }
+                
         logger.writeMsg("[Loader] initialization...OK!", DEBUG);
     }
 
@@ -596,6 +653,43 @@ vector<double> Loader::getVelocity( double x, double y, double z, int speciesTyp
     
     for( int n = 0; n < 3; n++ ){
         string varName =GET_VELOCITY+dirs[n]+SPECIES+to_string(speciesType+1);
+
+        double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+        velocity.push_back(val);
+    }
+    return velocity;
+}
+
+vector<double> Loader::getVelocity4InjectedParticles( double x, double y, double z ){
+    vector<double> velocity;
+    
+    for( int n = 0; n < 3; n++ ){
+        string varName =GET_VELOCITY+dirs[n]+INJECTED_PARTICLES;
+
+        double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+        velocity.push_back(val);
+    }
+    return velocity;
+}
+
+
+vector<double> Loader::getFluidVelocity( double x, double y, double z, int speciesType ){
+    vector<double> velocity;
+
+    for( int n = 0; n < 3; n++ ){
+        string varName =GET_FLUID_VELOCITY+dirs[n]+SPECIES+to_string(speciesType+1);
+
+        double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+        velocity.push_back(val);
+    }
+    return velocity;
+}
+
+vector<double> Loader:: getFluidVelocity4InjectedParticles( double x, double y, double z ){
+    vector<double> velocity;
+
+    for( int n = 0; n < 3; n++ ){
+        string varName = GET_FLUID_VELOCITY+dirs[n]+INJECTED_PARTICLES;
 
         double val = callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
         velocity.push_back(val);

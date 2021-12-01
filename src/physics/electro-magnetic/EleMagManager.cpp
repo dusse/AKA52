@@ -482,7 +482,7 @@ void EleMagManager::calculateEnext(int phase){
     
     int idxG1, idxG2, idxNeigbor, coord, neighbour, curPcomp;
     
-    double locB[3], locE[3], lapJ[3], divP[3], dens;
+    double locB[3], locE[3], divP[3], dens;
     double dL, dP;
     
     int istart = 1, iend = xSize+1, jstart = 1, jend = ySize+1, kstart = 1, kend = zSize+1;
@@ -497,7 +497,6 @@ void EleMagManager::calculateEnext(int phase){
                 idxG2 = IDX(i,j,k,xSize+2,ySize+2,zSize+2);
         
                 divP[0] = 0.0, divP[1] = 0.0, divP[2] = 0.0;
-                lapJ[0] = 0.0; lapJ[1] = 0.0; lapJ[2] = 0.0;
                 locB[0] = 0.0; locB[1] = 0.0; locB[2] = 0.0;
                 locE[0] = 0.0; locE[1] = 0.0; locE[2] = 0.0;
         
@@ -532,6 +531,7 @@ void EleMagManager::calculateEnext(int phase){
                                     -presEle[rigt]->getValue()[curPcomp])*wei*dP;
                     }
             
+                    /* keep laplacian for coming features
                     dL = deltasLap[coord];
                     for (neighbour=0; neighbour<2; neighbour++){
                         left = negbors4LaplacX[4*idxG2+2*neighbour+0];
@@ -549,26 +549,35 @@ void EleMagManager::calculateEnext(int phase){
                         lapJ[2] += (current[left]->getValue()[coord]
                                     -current[rigt]->getValue()[coord])*dL;
                     }
+                    */
                 }
 
                 dens = density[idxG2]->getValue()[0];
                 const double* velI = velocity[idxG2]->getValue();
                 const double* J    = current[idxG2]->getValue();
                 double revertdens = dens < EPS8 ? 0.0: edgeProfile(dens)/dens;
+
                 vector<double> ideal = {0.0, 0.0, 0.0};
                 ideal[0] = -(velI[1]*locB[2] - velI[2]*locB[1]);
                 ideal[1] = -(velI[2]*locB[0] - velI[0]*locB[2]);
                 ideal[2] = -(velI[0]*locB[1] - velI[1]*locB[0]);
                 
-                double Pxx = presEle[idxG2]->getValue()[0];
-                double Pyy = presEle[idxG2]->getValue()[3];
-                double Pzz = presEle[idxG2]->getValue()[5];
-                double trP = (Pxx+Pyy+Pzz)/3;
-                double dens2use = dension[idxG2]->getValue()[0];
-                double resist0 = pow(dens2use, 1.5)/pow(trP, 1.5);
                 double resist = loader->resistivity;
-                gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 0, resist);
-                gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 1, resist0);
+		
+
+		#ifdef USE_COLLISIONAL_RESIST_FACTOR
+                	double Pxx = presEle[idxG2]->getValue()[0];
+                	double Pyy = presEle[idxG2]->getValue()[3];
+                	double Pzz = presEle[idxG2]->getValue()[5];
+                	double trP = (Pxx+Pyy+Pzz)/3;
+                	double dens2use = dension[idxG2]->getValue()[0];
+			double resistCollisionalFactor = pow(dens2use, 1.5)/pow(trP, 1.5);
+			double presFactor = edgeProfilePressure(trP);
+			resist *= resistCollisionalFactor*presFactor;
+			gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 0, resist);
+			gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 1, presFactor);
+		#endif
+                                
                 
                 locE[0] = - (velI[1]*locB[2] - velI[2]*locB[1])
                           + (   J[1]*locB[2] -    J[2]*locB[1])*revertdens
@@ -593,7 +602,7 @@ void EleMagManager::calculateEnext(int phase){
                             gridMgr->setVectorVariableForNodeG2(idxG2, eleField2save, coord, ideal[coord]);
                         }
                         #ifdef HEAVYLOG
-                            write2Log(idxG2, i, j, k, velI, locB, divP, lapJ, J, dens);
+                            write2Log(idxG2, i, j, k, velI, locB, locB, divP, J, dens);
                         #endif
                     }
                 }

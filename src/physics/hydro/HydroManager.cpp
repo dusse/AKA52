@@ -322,3 +322,149 @@ void HydroManager::gatherMoments(int phase){
     logger->writeMsg(msg.c_str(), DEBUG);
     
 }
+
+
+
+void HydroManager::setIonPressureTensor(){
+
+    auto start_time = high_resolution_clock::now();
+    
+    string msg0 ="[HydroManager] start to calculate ion pressure tensor ";
+    logger->writeMsg(msg0.c_str(), DEBUG);
+    
+    int numOfSpecies = loader->getNumberOfSpecies();
+    int spn = numOfSpecies - 1;
+    VectorVar** densvel = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(spn));
+    
+    double pw = pusher->getParticleWeight4Type(spn);
+    double mass = pusher->getParticleMass4Type(spn);
+    
+    double pxx, pxy, pxz, pyy, pyz, pzz;
+    double vx, vy, vz;
+    
+    Particle** particles = pusher->getParticles();
+    int totalPrtclNumber = pusher->getTotalParticleNumber();
+    
+    int posShift = 0, velShift = 0;
+    
+    double x, y, z;
+    double lx, ly, lz;
+    int idx, idxG2, idx_x, idx_y, idx_z, i, j, k, coord;
+    
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    int xSize = loader->resolution[0];
+    int ySize = loader->resolution[1];
+    int zSize = loader->resolution[2];
+    
+    int xSizeG2 = xSize+2;
+    int ySizeG2 = ySize+2;
+    int zSizeG2 = zSize+2;
+    
+    int G2nodesNumber = xSizeG2*ySizeG2*zSizeG2;
+    double alpha, betta, gamma, alpha0, betta0, gamma0, weight;
+    
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    
+    double G2shift = 0.5;// in pixels
+    
+    double neighbourhood[8][3] = {{0,0,0}, {1,0,0}, {0,1,0}, {1,1,0},
+        {0,0,1}, {1,0,1}, {0,1,1}, {1,1,1}};
+    
+    double* pos;
+    double* vel;
+    
+    for( idx = 0; idx < G2nodesNumber; idx++ ){
+        for(int comp = 0; comp < 6; comp++ ){
+            gridMgr->setVectorVariableForNodeG2(idx, IONPRESSURE, comp, 0.0);
+        }
+    }
+    
+    for( idx=0; idx < totalPrtclNumber; idx++ ){
+        
+        pos  = particles[idx]->getPosition();
+        vel  = particles[idx]->getVelocity();
+        
+        x = 0.5*(pos[0]+pos[3]);
+        y = 0.5*(pos[1]+pos[4]);
+        z = 0.5*(pos[2]+pos[5]);
+        
+        x = (x - domainShiftX)/dx+G2shift;
+        y = (y - domainShiftY)/dy+G2shift;
+        z = (z - domainShiftZ)/dz+G2shift;
+        
+        alpha0 = x-int(x);
+        betta0 = y-int(y);
+        gamma0 = z-int(z);
+        
+        double alphas[8] = {1.0-alpha0, alpha0    , 1.0-alpha0, alpha0,
+            1.0-alpha0, alpha0    , 1.0-alpha0, alpha0};
+        double bettas[8] = {1.0-betta0, 1.0-betta0, betta0    , betta0,
+            1.0-betta0, 1.0-betta0, betta0    , betta0};
+        double gammas[8] = {1.0-gamma0, 1.0-gamma0, 1.0-gamma0, 1.0-gamma0,
+            gamma0    , gamma0    , gamma0    , gamma0};
+        
+        x = pos[0+posShift];
+        y = pos[1+posShift];
+        z = pos[2+posShift];
+        
+        i = int((x - domainShiftX)/dx+G2shift);// G2 index
+        j = int((y - domainShiftY)/dy+G2shift);
+        k = int((z - domainShiftZ)/dz+G2shift);
+        
+        idxG2 = IDX(i ,j ,k, xSizeG2, ySizeG2, zSizeG2);
+        
+        for( int neigh_num = 0; neigh_num < 8; neigh_num++ ){
+            
+            idx_x = i + neighbourhood[neigh_num][0];
+            idx_y = j + neighbourhood[neigh_num][1];
+            idx_z = k + neighbourhood[neigh_num][2];
+            
+            idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
+            
+            vx = densvel[idxG2]->getValue()[1];
+            vy = densvel[idxG2]->getValue()[2];
+            vz = densvel[idxG2]->getValue()[3];
+            
+            alpha = alphas[neigh_num];
+            betta = bettas[neigh_num];
+            gamma = gammas[neigh_num];
+            
+            weight = alpha*betta*gamma;
+
+            pxx = pw*mass*weight*(vel[0] - vx)*(vel[0] - vx);
+            pxy = pw*mass*weight*(vel[0] - vx)*(vel[1] - vy);
+            pxz = pw*mass*weight*(vel[0] - vx)*(vel[2] - vz);
+            pyy = pw*mass*weight*(vel[1] - vy)*(vel[1] - vy);
+            pyz = pw*mass*weight*(vel[1] - vy)*(vel[2] - vz);
+            pzz = pw*mass*weight*(vel[2] - vz)*(vel[2] - vz);
+            
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 0, pxx);
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 1, pxy);
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 2, pxz);
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 3, pyy);
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 4, pyz);
+            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 5, pzz);
+        }
+    }
+    
+    gridMgr->applyBC(IONPRESSURE);
+
+    auto end_time = high_resolution_clock::now();
+    string msg ="[HydroManager] setIonPressureTensor()... duration = "
+    +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
+    logger->writeMsg(msg.c_str(), DEBUG);
+
+
+}
+
+
+
+
+
+
+

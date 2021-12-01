@@ -38,6 +38,7 @@ enum G2VAR{
     DRIVER_CROSS,
     DRIVER_DIAG,
     RESISTIVITY,
+    IONPRESSURE,
     SIZEG2
 };
 
@@ -68,6 +69,10 @@ private:
     int totVarsOnG2;
     int totVarsOnG1;
     int totalNodeNumber;
+
+    int need2Fill = 0;
+    std::vector<std::string> outputVarNames;
+    std::vector<std::string> humanG2VarNames;
     
     VectorVar** nodesG1vars;
     VectorVar** nodesG2vars;
@@ -148,6 +153,7 @@ public:
     VectorVar** getVectorVariableOnG1(int);
     VectorVar** getVectorVariableOnG2(int);
     std::vector<std::vector<VectorVar>> getVectorVariablesForAllNodes();
+    std::vector<std::string> getHumanReadableOutputVarNames();
     
     void setVectorVariableForNodeG1(int, VectorVar);
     void setVectorVariableForNodeG2(int, VectorVar);

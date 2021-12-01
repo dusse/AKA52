@@ -121,6 +121,10 @@ void SimulationManager::runSimulation(int ac, char **av) {
             logger->writeMsg("*****************************************************", INFO);
         }
         if( i_time % maxTimeStep2Write == 0 ){
+            #ifdef GET_ION_PRESSURE
+            hydroMng->setIonPressureTensor();
+            #endif
+
             writer->write(fileNumCount);
 //            writer->writeAllForRestart();
             fileNumCount++;

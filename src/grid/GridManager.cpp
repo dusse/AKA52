@@ -595,41 +595,43 @@ void GridManager::initG2Nodes(){
                 }
                 
                 
-                VectorVar* ele         = new VectorVar(ELECTRIC,     {0.0, 0.0, 0.0});
-                VectorVar* ele_aux     = new VectorVar(ELECTRIC_AUX, {0.0, 0.0, 0.0});
-                VectorVar* current     = new VectorVar(CURRENT,      {0.0, 0.0, 0.0});
-                VectorVar* current_aux = new VectorVar(CURRENT_AUX,  {0.0, 0.0, 0.0});
-                VectorVar* veloion     = new VectorVar(VELOCION,     {0.0, 0.0, 0.0});
-                VectorVar* densele     = new VectorVar(DENSELEC,     {0.0});
-                VectorVar* veloele     = new VectorVar(VELOCELE,     {0.0, 0.0, 0.0});
-                VectorVar* presure     = new VectorVar(PRESSURE,     {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                VectorVar* presure_aux = new VectorVar(PRESSURE_AUX, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                VectorVar* presure_smo = new VectorVar(PRESSURE_SMO, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                VectorVar* pdriver     = new VectorVar(DRIVER,       {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                VectorVar* pdriver_aux = new VectorVar(DRIVER_AUX,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                VectorVar* driver_cross = new VectorVar(DRIVER_CROSS,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* ele         = new VectorVar(ELECTRIC,      {0.0, 0.0, 0.0});
+                VectorVar* ele_aux     = new VectorVar(ELECTRIC_AUX,  {0.0, 0.0, 0.0});
+                VectorVar* current     = new VectorVar(CURRENT,       {0.0, 0.0, 0.0});
+                VectorVar* current_aux = new VectorVar(CURRENT_AUX,   {0.0, 0.0, 0.0});
+                VectorVar* veloion     = new VectorVar(VELOCION,      {0.0, 0.0, 0.0});
+                VectorVar* densele     = new VectorVar(DENSELEC,      {0.0});
+                VectorVar* veloele     = new VectorVar(VELOCELE,      {0.0, 0.0, 0.0});
+                VectorVar* presure     = new VectorVar(PRESSURE,      {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* presure_aux = new VectorVar(PRESSURE_AUX,  {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* presure_smo = new VectorVar(PRESSURE_SMO,  {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* pdriver     = new VectorVar(DRIVER,        {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* pdriver_aux = new VectorVar(DRIVER_AUX,    {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                VectorVar* driver_cross = new VectorVar(DRIVER_CROSS, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* driver_diag = new VectorVar(DRIVER_DIAG,   {0.0, 0.0, 0.0});
                 VectorVar* resistivity = new VectorVar(RESISTIVITY,   {0.0, 0.0});
+                VectorVar* ionpresure  = new VectorVar(IONPRESSURE,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 
                 
                 
                 totVarsOnG2 = NUM_OF_MAIN_G2VARS+2*numOfSpecies;
                 
-                nodesG2vars[G2nodesNumber*ELECTRIC+    idx] = ele;
-                nodesG2vars[G2nodesNumber*ELECTRIC_AUX+idx] = ele_aux;
-                nodesG2vars[G2nodesNumber*CURRENT     +idx] = current;
-                nodesG2vars[G2nodesNumber*CURRENT_AUX +idx] = current_aux;
-                nodesG2vars[G2nodesNumber*VELOCION    +idx] = veloion;
-                nodesG2vars[G2nodesNumber*DENSELEC    +idx] = densele;
-                nodesG2vars[G2nodesNumber*VELOCELE    +idx] = veloele;
-                nodesG2vars[G2nodesNumber*PRESSURE    +idx] = presure;
-                nodesG2vars[G2nodesNumber*PRESSURE_AUX+idx] = presure_aux;
-                nodesG2vars[G2nodesNumber*PRESSURE_SMO+idx] = presure_smo;
-                nodesG2vars[G2nodesNumber*DRIVER      +idx] = pdriver;
-                nodesG2vars[G2nodesNumber*DRIVER_AUX  +idx] = pdriver_aux;
-                nodesG2vars[G2nodesNumber*DRIVER_CROSS+idx] = driver_cross;
-                nodesG2vars[G2nodesNumber*DRIVER_DIAG +idx] = driver_diag;
-                nodesG2vars[G2nodesNumber*RESISTIVITY +idx] = resistivity;
+                nodesG2vars[G2nodesNumber*ELECTRIC+    idx] = ele; humanG2VarNames.push_back("e");
+                nodesG2vars[G2nodesNumber*ELECTRIC_AUX+idx] = ele_aux; humanG2VarNames.push_back("eaux");
+                nodesG2vars[G2nodesNumber*CURRENT     +idx] = current; humanG2VarNames.push_back("j");
+                nodesG2vars[G2nodesNumber*CURRENT_AUX +idx] = current_aux; humanG2VarNames.push_back("jaux");
+                nodesG2vars[G2nodesNumber*VELOCION    +idx] = veloion; humanG2VarNames.push_back("vi");
+                nodesG2vars[G2nodesNumber*DENSELEC    +idx] = densele; humanG2VarNames.push_back("ne");
+                nodesG2vars[G2nodesNumber*VELOCELE    +idx] = veloele; humanG2VarNames.push_back("ve");
+                nodesG2vars[G2nodesNumber*PRESSURE    +idx] = presure; humanG2VarNames.push_back("pe");
+                nodesG2vars[G2nodesNumber*PRESSURE_AUX+idx] = presure_aux; humanG2VarNames.push_back("peaux");
+                nodesG2vars[G2nodesNumber*PRESSURE_SMO+idx] = presure_smo; humanG2VarNames.push_back("pesmo");
+                nodesG2vars[G2nodesNumber*DRIVER      +idx] = pdriver; humanG2VarNames.push_back("pdr");
+                nodesG2vars[G2nodesNumber*DRIVER_AUX  +idx] = pdriver_aux; humanG2VarNames.push_back("pdraux");
+                nodesG2vars[G2nodesNumber*DRIVER_CROSS+idx] = driver_cross; humanG2VarNames.push_back("pdrcr");
+                nodesG2vars[G2nodesNumber*DRIVER_DIAG +idx] = driver_diag; humanG2VarNames.push_back("pdrdiag");
+                nodesG2vars[G2nodesNumber*RESISTIVITY +idx] = resistivity; humanG2VarNames.push_back("eta");
+                nodesG2vars[G2nodesNumber*IONPRESSURE +idx] = ionpresure; humanG2VarNames.push_back("pi");
                 
                 
                 SHIFT_MAIN_DENS = NUM_OF_MAIN_G2VARS;
@@ -639,9 +641,15 @@ void GridManager::initG2Nodes(){
                     VectorVar* densvel = new VectorVar(DENS_VEL(spn), {0.0, 0.0, 0.0, 0.0});
                     VectorVar* densaux = new VectorVar(DENS_AUX(spn), {0.0});
                     
-                    nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS    +spn)+idx] = densvel;
-                    nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS_AUX+spn)+idx] = densaux;
+                    nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS    +spn)+idx] = densvel; 
+                    nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS_AUX+spn)+idx] = densaux; 
                 }
+		for(int spn = 0; spn<numOfSpecies;spn++){
+			humanG2VarNames.push_back("nv"+to_string(spn+1));
+		}
+		for(int spn = 0; spn<numOfSpecies;spn++){
+			humanG2VarNames.push_back("nvaux"+to_string(spn+1));
+		}
                 
             }
         }
@@ -1572,7 +1580,7 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     result.reserve(xRes*yRes*zRes);
     int i,j,k;
     
-    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO, DRIVER_CROSS, DRIVER_DIAG, RESISTIVITY};
+    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO, DRIVER_CROSS, DRIVER_DIAG, RESISTIVITY, IONPRESSURE};
     int numOfSpecies = loader->getNumberOfSpecies();
     
     for( i = 0; i < numOfSpecies; i++ ){
@@ -1585,14 +1593,29 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
                 idxG1 = IDX(i  ,j  ,k  ,xResG1,yResG1,zResG1);
                 idxG2 = IDX(i+1,j+1,k+1,xResG2,yResG2,zResG2);
                 vector<VectorVar> allVars;
+                
                 for( int varN = 0; varN < totVarsOnG2; varN++ ){
                     if( stopList.count(varN) ){
                         continue;
                     }
                     allVars.push_back(*nodesG2vars[G2nodesNumber*varN+idxG2]);
+
+		    if (need2Fill == 0) outputVarNames.push_back(humanG2VarNames[varN]);                    
                 }
                 allVars.push_back(*nodesG1vars[G1nodesNumber*MAGNETIC+idxG1]);
+ 		if (need2Fill == 0) outputVarNames.push_back("b");
+
+                #ifdef USE_COLLISIONAL_RESIST_FACTOR
                 allVars.push_back(*nodesG2vars[G2nodesNumber*RESISTIVITY+idxG2]);
+ 		if (need2Fill == 0) outputVarNames.push_back("eta");
+                #endif
+
+                #ifdef GET_ION_PRESSURE
+                allVars.push_back(*nodesG2vars[G2nodesNumber*IONPRESSURE+idxG2]);
+ 		if (need2Fill == 0) outputVarNames.push_back("pi");
+                #endif
+
+		need2Fill = 1;
                 result.push_back(allVars);
             }
         }
@@ -1601,6 +1624,9 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     return result;
 }
 
+vector<string> GridManager::getHumanReadableOutputVarNames(){
+	return outputVarNames;
+}
 
 
 void GridManager::setVectorVariableForNodeG1(int idx, VectorVar variable){
