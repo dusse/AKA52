@@ -79,7 +79,7 @@ PyObject * Loader::getPythonClassInstance(string className){
     string msg = "[Loader] Start to instantiate the Python class " + className;
     logger.writeMsg(msg.c_str(), DEBUG);
     
-    string inputFilePath = string(getenv("PYTHONPATH"))+ INIT_CLASS_NAME + ".py";
+    string inputFilePath = string(getenv("INPUTFILEPATH"))+ INIT_CLASS_NAME + ".py";
     string introMsg = "[Loader] used input file is " + inputFilePath;
     logger.writeMsg(introMsg.c_str(), INFO);
 
@@ -149,7 +149,12 @@ long Loader::callPyLongFunction( PyObject* instance,
                                 const string brackets){
 
     if (checkMethodExistence(funcName, brackets) == METHOD_OK){
-        return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
+	#if PY_MAJOR_VERSION >= 3
+ 	return PyLong_AS_LONG(getPyMethod(instance,funcName,brackets));
+	#else
+ 	return PyInt_AsLong(getPyMethod(instance,funcName,brackets));
+	#endif
+        
     }else{
  	return 0.0;
     }    
@@ -188,7 +193,7 @@ int Loader::checkMethodExistence(const string funcName, const string brackets){
 	return METHOD_FAIL;
     }
 
-    string inputFilePath = string(getenv("PYTHONPATH"))+ INIT_CLASS_NAME + ".py";
+    string inputFilePath = string(getenv("INPUTFILEPATH"))+ INIT_CLASS_NAME + ".py";
 
     ifstream inFile;
     inFile.open(inputFilePath);

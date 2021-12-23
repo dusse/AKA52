@@ -44,7 +44,7 @@ double edgeProfile(double dens){
 double edgeProfilePressure(double pres){
     
     double const presLow  = 0.001;
-    double const presHigh = 10.0;
+    double const presHigh = 1.0;
     
     double x = (pres-presLow)/(presHigh-presLow)-1;
     
