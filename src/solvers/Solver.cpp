@@ -60,7 +60,7 @@ void Solver::performCalculation(int PHASE, int i_time){
     pusher->push(PHASE, i_time);
     
     if ( loader->numOfSpots > 0 ) {
-        laserMng->addIons();
+        laserMng->addIons(i_time);
     }
     
     hydroMng->gatherMoments(PHASE);

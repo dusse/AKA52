@@ -44,7 +44,7 @@ public:
     
     ~LaserMockManager();
     
-    void addIons();
+    void addIons(int);
     void accelerate(int);
     
 

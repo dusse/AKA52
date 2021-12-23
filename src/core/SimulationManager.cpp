@@ -55,14 +55,28 @@ SimulationManager::SimulationManager(int ac, char **av) {
     
     
     if (ac > 1){
-        setenv("PYTHONPATH", av[1] , 1);
+
+        setenv("INPUTFILEPATH", av[1] , 1);
+	auto pythonPath = getenv("PYTHONPATH");
+	string msg;
+	string pyPath;
+	if (pythonPath == NULL){
+		msg = "[SimulationManager] variable PYTHONPATH is not set !!!";
+		pyPath = av[1];
+	}else{
+		msg = "[SimulationManager] variable PYTHONPATH ="+string(pythonPath);
+		pyPath = string(pythonPath) +":"+av[1];
+	}	 
+
+	logger->writeMsg(msg.c_str(), INFO);
+	setenv("PYTHONPATH", pyPath.c_str() , 1);
     }else{
         if(rank == 0){
             string msg ="[SimulationManager] ATTENTION!!! used default input file path src/input/ !!!";
             logger->writeMsg(msg.c_str(), CRITICAL);
         }
         const char  *PRJ_PATH = "src/input/";
-        setenv("PYTHONPATH", PRJ_PATH , 1);
+        setenv("INPUTFILEPATH", PRJ_PATH , 1);
     }
     initialize();
 }
