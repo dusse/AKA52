@@ -186,7 +186,7 @@ void ClosureManager::initPressureDampingCoeff(){
 
 void ClosureManager::initPressure(){
     
-    double pres;
+    double pxx, pyy, pzz;
     
     int idx, idxOnG2;
     
@@ -215,31 +215,28 @@ void ClosureManager::initPressure(){
                 y = (j + G2shift)*dy + domainShiftY;
                 z = (k + G2shift)*dz + domainShiftZ;
         
-                pres = loader->getElectronPressure(x,y,z);
+                pxx = loader->getElectronPressureXX(x,y,z);
+                pyy = loader->getElectronPressureYY(x,y,z);
+                pzz = loader->getElectronPressureZZ(x,y,z);
         
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 0, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 3, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 5, pres);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 0, pxx);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 3, pyy);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE, 5, pzz);
                 
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 0, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 3, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 5, pres);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 0, pxx);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 3, pyy);
+                gridMgr->setVectorVariableForNodeG2(idxOnG2, PRESSURE_AUX, 5, pzz);
         
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, DRIVER, 0, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, DRIVER, 3, pres);
-                gridMgr->setVectorVariableForNodeG2(idxOnG2, DRIVER, 5, pres);
             }
         }
     }
     
     gridMgr->sendBoundary2Neighbor(PRESSURE);
     gridMgr->sendBoundary2Neighbor(PRESSURE_AUX);
-    gridMgr->sendBoundary2Neighbor(DRIVER);
     
     gridMgr->applyBC(PRESSURE);
     gridMgr->applyBC(PRESSURE_AUX);
-    gridMgr->applyBC(DRIVER);
-    
+
     VectorVar** pdriverr = gridMgr->getVectorVariableOnG2(DRIVER);
     int nG2= xResG2*yResG2*zResG2;
     const double* dr;

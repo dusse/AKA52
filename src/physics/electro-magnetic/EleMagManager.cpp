@@ -465,19 +465,13 @@ void EleMagManager::calculateEnext(int phase){
     
     int compIDX[3][3]={{0, 1, 2},{1,3,4},{2,4,5}};
     double WEIHTS[9] = {0.125, 0.125, 0.125, 0.125, 0.250, 0.250, 0.250, 0.250, 0.500};
-    double deltas[3] = {0.25/dx, 0.25/dy, 0.25/dz};
-    double deltasLap[3] = {1.0/dx/dx, 1.0/dy/dy, 1.0/dz/dz};
     double wei;
     int left, rigt;
     
     const int* negbors4PresX = gridMgr->getNghbd4DivPeInXonG2();
     const int* negbors4PresY = gridMgr->getNghbd4DivPeInYonG2();
     const int* negbors4PresZ = gridMgr->getNghbd4DivPeInZonG2();
-    
-    const int* negbors4LaplacX = gridMgr->getNghbd4LaplacInXonG2();
-    const int* negbors4LaplacY = gridMgr->getNghbd4LaplacInYonG2();
-    const int* negbors4LaplacZ = gridMgr->getNghbd4LaplacInZonG2();
-    
+        
     const int* neighbourhood = gridMgr->getNeighbourhoodOnG1();
     
     int idxG1, idxG2, idxNeigbor, coord, neighbour, curPcomp;
@@ -507,49 +501,34 @@ void EleMagManager::calculateEnext(int phase){
                         locB[coord] += 0.125*bField[idxNeigbor]->getValue()[coord];
                     }
                     
-                    dP = deltas[coord];
-                    for( neighbour = 0; neighbour < 9; neighbour++ ){
+                    
+                    for( neighbour=0; neighbour<9; neighbour++ ){
                 
                         wei  = WEIHTS[neighbour];
                     
-                        curPcomp = compIDX[0][coord];
-                        left = negbors4PresX[18*idxG2+2*neighbour+0];
+			//dx
+			curPcomp = compIDX[coord][0];   
+			left = negbors4PresX[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresX[18*idxG2+2*neighbour+1];
-                        divP[0] += (presEle[left]->getValue()[curPcomp]
-                                    -presEle[rigt]->getValue()[curPcomp])*wei*dP;
-                        
-                        curPcomp = compIDX[1][coord];
+			                     	
+                        divP[coord] += (presEle[left]->getValue()[curPcomp]
+                                    -presEle[rigt]->getValue()[curPcomp])*wei*0.25/dx;
+			    
+			//dy                   
+                        curPcomp = compIDX[coord][1];
                         left = negbors4PresY[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresY[18*idxG2+2*neighbour+1];
-                        divP[1] += (presEle[left]->getValue()[curPcomp]
-                                    -presEle[rigt]->getValue()[curPcomp])*wei*dP;
-                
-                        curPcomp = compIDX[2][coord];
+                        divP[coord] += (presEle[left]->getValue()[curPcomp]
+                                    -presEle[rigt]->getValue()[curPcomp])*wei*0.25/dy;
+                	
+			//dz
+                        curPcomp = compIDX[coord][2];
                         left = negbors4PresZ[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresZ[18*idxG2+2*neighbour+1];
-                        divP[2] += (presEle[left]->getValue()[curPcomp]
-                                    -presEle[rigt]->getValue()[curPcomp])*wei*dP;
+                        divP[coord] += (presEle[left]->getValue()[curPcomp]
+                                    -presEle[rigt]->getValue()[curPcomp])*wei*0.25/dz;
                     }
             
-                    /* keep laplacian for coming features
-                    dL = deltasLap[coord];
-                    for (neighbour=0; neighbour<2; neighbour++){
-                        left = negbors4LaplacX[4*idxG2+2*neighbour+0];
-                        rigt = negbors4LaplacX[4*idxG2+2*neighbour+1];
-                        lapJ[0] += (current[left]->getValue()[coord]
-                                    -current[rigt]->getValue()[coord])*dL;
-                        
-                        left = negbors4LaplacY[4*idxG2+2*neighbour+0];
-                        rigt = negbors4LaplacY[4*idxG2+2*neighbour+1];
-                        lapJ[1] += (current[left]->getValue()[coord]
-                                    -current[rigt]->getValue()[coord])*dL;
-                
-                        left = negbors4LaplacZ[4*idxG2+2*neighbour+0];
-                        rigt = negbors4LaplacZ[4*idxG2+2*neighbour+1];
-                        lapJ[2] += (current[left]->getValue()[coord]
-                                    -current[rigt]->getValue()[coord])*dL;
-                    }
-                    */
                 }
 
                 dens = density[idxG2]->getValue()[0];

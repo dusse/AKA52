@@ -20,7 +20,9 @@ const string  GET_OUTPUT_DIR = "getOutputDir";
 const string  GET_FILENAME_TEMPLATE = "getOutputFilenameTemplate";
 const string  GET_DENSITY = "getDensity";
 const string  GET_BFIELD   = "getBfield";
-const string  GET_ELEPRES  = "getElectronPressure";
+const string  GET_ELEPRESXX  = "getElectronPressureXX";
+const string  GET_ELEPRESYY  = "getElectronPressureYY";
+const string  GET_ELEPRESZZ  = "getElectronPressureZZ";
 const string  GET_PRESSURE_SMOOTH_STRIDE = "getElectronPressureSmoothingStride";
 const string  GET_VELOCITY = "getVelocity";
 const string  GET_FLUID_VELOCITY = "getFluidVelocity";
@@ -760,10 +762,23 @@ double Loader::getPPC4species(int speciesType){
 }
 
 
-double Loader::getElectronPressure( double x, double y, double z ){
-    string varName = GET_ELEPRES;
+double Loader::getElectronPressureXX( double x, double y, double z ){
+    string varName = GET_ELEPRESXX;
     return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
 }
+
+
+double Loader::getElectronPressureYY( double x, double y, double z ){
+    string varName = GET_ELEPRESYY;
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+}
+
+
+double Loader::getElectronPressureZZ( double x, double y, double z ){
+    string varName = GET_ELEPRESZZ;
+    return callPyFloatFunctionWith3args( pInstance, varName, BRACKETS_3DOUBLE, x, y, z );
+}
+
 
 double Loader::getTargetIonDensityProfile( double x, double y, double z ){
     string varName = GET_TARGET_ION_DENSITY2SUSTAIN;

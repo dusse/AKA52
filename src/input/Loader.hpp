@@ -110,8 +110,10 @@ public:
     Loader();
     ~Loader();
     void load();
-    double getElectronPressure(double,double,double);
-    
+    double getElectronPressureXX(double,double,double);
+    double getElectronPressureYY(double,double,double);
+    double getElectronPressureZZ(double,double,double);
+	    
     double getTargetIonDensityProfile(double,double,double);
     double getElectronPressureProfile(double,double,double);
     

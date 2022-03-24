@@ -177,7 +177,13 @@ class Initializer:
     def getOutputTimestep(self):
         return self.outputStride
 
-    def getElectronPressure(self, x, y, z):
+    def getElectronPressureXX(self, x, y, z):
+        return self.Pele0
+
+    def getElectronPressureYY(self, x, y, z):
+        return self.Pele0
+
+    def getElectronPressureZZ(self, x, y, z):
         return self.Pele0
     
 
