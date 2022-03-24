@@ -177,7 +177,13 @@ class Initializer:
     def getOutputTimestep(self):
         return self.outputStride
 
-    def getElectronPressure(self, x, y, z):
+    def getElectronPressureXX(self, x, y, z):
+        return self.Pele0
+
+    def getElectronPressureYY(self, x, y, z):
+        return self.Pele0
+
+    def getElectronPressureZZ(self, x, y, z):
         return self.Pele0
     
 
@@ -326,10 +332,10 @@ class Initializer:
         return self.ZERO
     
     def getVelocityY4InjectedParticles(self, x, y, z):
-        return getVelocityX4InjectedParticles(x, y, z)
+        return self.getVelocityX4InjectedParticles(x, y, z)
     
     def getVelocityZ4InjectedParticles(self, x, y, z):
-        return getVelocityX4InjectedParticles(x, y, z)
+        return self.getVelocityX4InjectedParticles(x, y, z)
 
     # set density profile to sustain by ablation operator
     def getTargetIonDensity2sustain(self, x, y, z):

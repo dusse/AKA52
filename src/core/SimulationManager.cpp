@@ -53,23 +53,13 @@ SimulationManager::SimulationManager(int ac, char **av) {
     }
     
     
-    
+    string msg;
+    string pyPath;
+    string filePath;
     if (ac > 1){
 
         setenv("INPUTFILEPATH", av[1] , 1);
-	auto pythonPath = getenv("PYTHONPATH");
-	string msg;
-	string pyPath;
-	if (pythonPath == NULL){
-		msg = "[SimulationManager] variable PYTHONPATH is not set !!!";
-		pyPath = av[1];
-	}else{
-		msg = "[SimulationManager] variable PYTHONPATH ="+string(pythonPath);
-		pyPath = string(pythonPath) +":"+av[1];
-	}	 
-
-	logger->writeMsg(msg.c_str(), INFO);
-	setenv("PYTHONPATH", pyPath.c_str() , 1);
+	filePath = av[1];
     }else{
         if(rank == 0){
             string msg ="[SimulationManager] ATTENTION!!! used default input file path src/input/ !!!";
@@ -77,7 +67,21 @@ SimulationManager::SimulationManager(int ac, char **av) {
         }
         const char  *PRJ_PATH = "src/input/";
         setenv("INPUTFILEPATH", PRJ_PATH , 1);
+	filePath = "src/input/";
     }
+    auto pythonPath = getenv("PYTHONPATH");
+    
+    if( pythonPath == NULL ){
+        msg = "[SimulationManager] variable PYTHONPATH is not set !!!";
+        pyPath = filePath;
+    }else{
+        msg = "[SimulationManager] variable PYTHONPATH ="+string(pythonPath);
+        pyPath = string(pythonPath) +":"+filePath;
+    }	 
+
+    logger->writeMsg(msg.c_str(), INFO);
+    setenv("PYTHONPATH", pyPath.c_str() , 1);
+
     initialize();
 }
 
