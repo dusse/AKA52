@@ -33,6 +33,7 @@ _SRCS =  $(DSRC)/core/SimulationManager.cpp \
                $(DSRC)/physics/electro-magnetic/EleMagManager.cpp \
                $(DSRC)/physics/pressure-closure/ClosureManager.cpp \
                $(DSRC)/physics/laser/LaserMockManager.cpp \
+               $(DSRC)/physics/collisions/IonIonCollisionManager.cpp \
                $(DSRC)/common/variables/VectorVar.cpp \
                $(DSRC)/solvers/Solver.cpp \
                $(DSRC)/solvers/ModelInitializer.cpp \

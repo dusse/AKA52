@@ -103,10 +103,10 @@ void SimulationManager::initialize() {
     hydroMng.reset(new HydroManager(loader, gridMng, pusher));
     closureMng.reset(new ClosureManager(loader, gridMng));
     elemagMng.reset(new EleMagManager(loader, gridMng));
-    
+    collideMng.reset(new IonIonCollisionManager(loader, gridMng, pusher));
     solver.reset(new Solver(loader, gridMng, pusher,
-                                  hydroMng, elemagMng, closureMng,
-                                  laserMng));    
+                            hydroMng, elemagMng, closureMng,
+                            laserMng, collideMng));    
     
     writer.reset(new Writer(loader, gridMng, pusher));
     
@@ -126,9 +126,9 @@ void SimulationManager::runSimulation(int ac, char **av) {
     int rank ;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   
-    for ( i_time=0; i_time < maxTimeStep; i_time++ ){
+    for( i_time = 0; i_time < maxTimeStep; i_time++ ){
         auto start_time = high_resolution_clock::now();
-        if(rank == 0){
+        if( rank == 0 ){
             logger->writeMsg("*****************************************************", INFO);
             logger->writeMsg("****                                             ****", INFO);
             logger->writeMsg(string("[SimulationManager] step = "
@@ -144,6 +144,13 @@ void SimulationManager::runSimulation(int ac, char **av) {
             #endif
 
             writer->write(fileNumCount);
+            
+            #ifdef WRITE_PARTICLES
+            writer->writeParticles(fileNumCount);                
+            #endif
+            #ifdef WRITE_LEFT_PARTICLES
+            writer->writeLeftParticles(fileNumCount);
+            #endif
 //            writer->writeAllForRestart();
             fileNumCount++;
         }

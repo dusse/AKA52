@@ -16,6 +16,7 @@
 #include "../physics/electro-magnetic/EleMagManager.hpp"
 #include "../physics/pressure-closure/ClosureManager.hpp"
 #include "../physics/laser/LaserMockManager.hpp"
+#include "../physics/collisions/IonIonCollisionManager.hpp"
 
 #include "../misc/Logger.hpp"
 #include "../output/Writer.hpp"
@@ -38,6 +39,7 @@ private:
     std::shared_ptr<EleMagManager> elemagMng;
     std::shared_ptr<ClosureManager> closureMng;
     std::shared_ptr<LaserMockManager> laserMng;
+    std::shared_ptr<IonIonCollisionManager> collideMng;
     
     std::shared_ptr<Solver> solver;
     

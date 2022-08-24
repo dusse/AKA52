@@ -43,8 +43,8 @@ double edgeProfile(double dens){
 
 double edgeProfilePressure(double pres){
     
-    double const presLow  = 0.001;
-    double const presHigh = 1.0;
+    double const presLow  = 0.0;
+    double const presHigh = 5.0;// important for plasmoid instability due to etaJ
     
     double x = (pres-presLow)/(presHigh-presLow)-1;
     

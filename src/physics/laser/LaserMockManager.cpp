@@ -1,4 +1,4 @@
-#include "LaserMockManager.hpp"
+ #include "LaserMockManager.hpp"
 
 using namespace std;
 using namespace chrono;
@@ -101,7 +101,7 @@ void LaserMockManager::initialize(){
 void LaserMockManager::addIons(int i_time){
     auto start_time = high_resolution_clock::now();
 
-    const double COLD_TEMPERATURE = 1e-4;
+    const double VELOCITY4COLDTEMPERATURE = EPSILON;
 
     double dx = loader->spatialSteps[0];
     double dy = loader->spatialSteps[1];
@@ -131,10 +131,10 @@ void LaserMockManager::addIons(int i_time){
     double r1, r2;
     int idxOnG2;
     int requiredPrtclNum;
-
-    for( i = 0; i < xRes; i++){
-        for( j = 0; j < yRes; j++) {
-            for( k = 0; k < zRes; k++){
+    int distributionType = loader->getDFtype4InjectedParticles();
+    for( i = 0; i < xRes; i++ ){
+        for( j = 0; j < yRes; j++ ){
+            for( k = 0; k < zRes; k++ ){
                 
                 idxOnG2 = IDX(i+1, j+1, k+1, xResG2, yResG2, zResG2);
                 
@@ -144,16 +144,16 @@ void LaserMockManager::addIons(int i_time){
                 int type2use = 0;
                 if( pres > 0.0 ){
                     type2use = PARTICLE_TYPE2LOAD;
-		    desireDens = targetIonDensityProfile[idxOnG2] - dens4Injected[idxOnG2]->getValue()[0];
+                    desireDens = targetIonDensityProfile[idxOnG2] - dens4Injected[idxOnG2]->getValue()[0];
                 }else{
                     type2use = loader->prtclType2Load;
-		    desireDens = targetIonDensityProfile[idxOnG2] - dens4nonInjected[idxOnG2]->getValue()[0];
+                    desireDens = targetIonDensityProfile[idxOnG2] - dens4nonInjected[idxOnG2]->getValue()[0];
                 }
                 double particleWeight = pusher->getParticleWeight4Type(type2use);
                 
                 requiredPrtclNum = int(desireDens/particleWeight);
                 
-                for (ptclIDX=0; ptclIDX < requiredPrtclNum; ptclIDX++){
+                for( ptclIDX = 0; ptclIDX < requiredPrtclNum; ptclIDX++ ){
                     
                     particles2add.push_back(shared_ptr<Particle>(new Particle));
                     
@@ -173,40 +173,45 @@ void LaserMockManager::addIons(int i_time){
                                           pos[0], pos[1], pos[2]};
                     
                     particles2add[particle_idx]->setPosition(pos2Save);
-                        
                     particles2add[particle_idx]->setType(type2use);
                         
-                    r1 = RNM;
-                    r2 = RNM;
-                    r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
-                    r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
-                    r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                    r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-		    if( i_time > loader->laserPulseDuration_tsnum ){
-                        vpb[0] = sqrt(-2*log(r1))*COLD_TEMPERATURE*cos(2*PI*r2);
-		    }else{
-                        vpb[0] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+0]*cos(2*PI*r2);
-		    }
-                    vpb[0]+= ionFluidVelocityProfile[3*idxOnG2+0];
-		    if( i_time > loader->laserPulseDuration_tsnum ){
-                        vpb[1] = sqrt(-2*log(r1))*COLD_TEMPERATURE*sin(2*PI*r2);
-                    }else{
-                        vpb[1] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+1]*sin(2*PI*r2);
-                    }
-                    vpb[1]+= ionFluidVelocityProfile[3*idxOnG2+1];                        
-                    r1 = RNM;
-                    r2 = RNM;
-                    r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
-                    r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
-                    r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                    r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-		    if( i_time > loader->laserPulseDuration_tsnum ){
-                        vpb[2] = sqrt(-2*log(r1))*COLD_TEMPERATURE*cos(2*PI*r2);
-		    }else{
-                        vpb[2] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+2]*cos(2*PI*r2);
-		    }
+                    if( distributionType == 0 ){
+                        r1 = RNM;
+                        r2 = RNM;
+                        r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
+                        r1   = (r1 > EPS8)? r1 : r1 + EPS8;
+                        if( i_time > loader->laserPulseDuration_tsnum ){
+                            vpb[0] = sqrt(-2*log(r1))*VELOCITY4COLDTEMPERATURE*cos(2*PI*r2);
+                            vpb[1] = sqrt(-2*log(r1))*VELOCITY4COLDTEMPERATURE*sin(2*PI*r2);
+                            r1 = RNM;
+                            r2 = RNM;
+                            r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
+                            r1   = (r1 > EPS8)? r1 : r1 + EPS8;
+                            vpb[2] = sqrt(-2*log(r1))*VELOCITY4COLDTEMPERATURE*cos(2*PI*r2);
+                        }else{
+                            vpb[0] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+0]*cos(2*PI*r2);
+                            vpb[0]+= ionFluidVelocityProfile[3*idxOnG2+0];
+                            vpb[1] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+1]*sin(2*PI*r2);
+                            vpb[1]+= ionFluidVelocityProfile[3*idxOnG2+1];
+                            r1 = RNM;
+                            r2 = RNM;
+                            r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
+                            r1   = (r1 > EPS8)? r1 : r1 + EPS8;
+                            vpb[2] = sqrt(-2*log(r1))*ionThermalVelocityProfile[3*idxOnG2+2]*cos(2*PI*r2);
+                            vpb[2]+= ionFluidVelocityProfile[3*idxOnG2+2];
+                         }
 
-                    vpb[2]+= ionFluidVelocityProfile[3*idxOnG2+2];                         
+                    }else{
+                        double randoms[3] = {RNM,RNM,RNM};
+                        for( int comp = 0; comp < 3; comp++ ){
+                            if( i_time > loader->laserPulseDuration_tsnum ){
+                                vpb[comp] = (1.0-2.0*randoms[comp])*VELOCITY4COLDTEMPERATURE;
+                            }else{
+                                vpb[comp] = (1.0-2.0*randoms[comp])*ionThermalVelocityProfile[3*idxOnG2+comp];
+                                vpb[comp]+= ionFluidVelocityProfile[3*idxOnG2+comp];
+                            }
+                        }
+                    }
                         
                     double vel2Save[6] = {vpb[0], vpb[1], vpb[2],
                                           vpb[0], vpb[1], vpb[2]};
@@ -238,36 +243,25 @@ void LaserMockManager::accelerate(int i_time){
     
     int xRes = loader->resolution[0],
         yRes = loader->resolution[1],
-        zRes = loader->resolution[2];
-    
+        zRes = loader->resolution[2];    
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
-    
-    double G2shift = 0.5;
-    
+    int G2nodesNumber = xResG2*yResG2*zResG2;
+
     VectorVar** pdriverr    = gridMgr->getVectorVariableOnG2(DRIVER);
     double energyOnDomain = 0;
-    for( i = 0; i < xRes+1; i++){
-        for( j = 0; j < yRes+1; j++) {
-            for( k = 0; k < zRes+1; k++){
-                idxOnG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
-                const double* dr = pdriverr[idxOnG2]->getValue();
-                energyOnDomain += (dr[0]+dr[3]+dr[5])/3;
-            }
-        }
+    for( idxOnG2 = 0; idxOnG2 < G2nodesNumber; idxOnG2++ ){
+        const double* dr = pdriverr[idxOnG2]->getValue();
+        energyOnDomain += (dr[0]+dr[3]+dr[5])/3;
     }
     
-    
-    // update only electrons
-    for (i = 1; i < xRes + 1; i++) {
-        for (j = 1; j < yRes + 1; j++) {
-            for (k = 1; k < zRes + 1; k++) {
-                
-                idxOnG2 = IDX(i  , j  , k  , xResG2, yResG2, zResG2);
-                
+    for( i = 1; i < xRes + 1; i++ ){
+        for( j = 1; j < yRes + 1; j++ ){
+            for( k = 1; k < zRes + 1; k++ ){                
+                idxOnG2 = IDX(i ,j ,k , xResG2, yResG2, zResG2);                
                 double pres2set = electronPressureProfile[idxOnG2];
                 gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 0, pres2set);
                 gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 3, pres2set);
-                gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 5, pres2set);                
+                gridMgr->addVectorVariableForNodeG2(idxOnG2, DRIVER, 5, pres2set);
             }
         }
     }
@@ -276,14 +270,9 @@ void LaserMockManager::accelerate(int i_time){
     gridMgr->applyBC(DRIVER);
     
     double energyOnDomainNew = 0;
-    for( i = 0; i < xRes+1; i++ ){
-        for( j = 0; j < yRes+1; j++ ){
-            for( k = 0; k < zRes+1; k++ ){
-                idxOnG2 = IDX(i, j, k, xResG2, yResG2, zResG2);
-                const double* dr = pdriverr[idxOnG2]->getValue();
-                energyOnDomainNew += (dr[0]+dr[3]+dr[5])/3;
-            }
-        }
+    for( idxOnG2 = 0; idxOnG2 < G2nodesNumber; idxOnG2++ ){
+        const double* dr = pdriverr[idxOnG2]->getValue();
+        energyOnDomainNew += (dr[0]+dr[3]+dr[5])/3;
     }
 
     double laserdelta = (energyOnDomainNew - energyOnDomain)*loader->getTimeStep();

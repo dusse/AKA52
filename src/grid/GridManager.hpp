@@ -38,7 +38,6 @@ enum G2VAR{
     DRIVER_CROSS,
     DRIVER_DIAG,
     RESISTIVITY,
-    IONPRESSURE,
     SIZEG2
 };
 
@@ -61,7 +60,8 @@ private:
     
     int NUM_OF_MAIN_G2VARS = SIZEG2;
     int SHIFT_MAIN_DENS = 0;
-    int SHIFT_MAIN_DENS_AUX  = 0;
+    int SHIFT_MAIN_DENS_AUX = 0;
+    int SHIFT_MAIN_ION_PRES = 0;
     
     
     int G1nodesNumber;
@@ -131,6 +131,7 @@ public:
    
     int DENS_AUX(int);
     int DENS_VEL(int);
+    int ION_PRESSURE(int);
     
     int getVarsNumOnG2();
     int getVarsNumOnG1();
@@ -169,7 +170,6 @@ public:
     void sendBoundary2Neighbor(int);
     void gatherBoundaryUsingNeighbor(int);
     void applyBC(int);
-    void applyBC4G1(int);
     
     void smoothDensAndIonVel();
     void smooth(int);

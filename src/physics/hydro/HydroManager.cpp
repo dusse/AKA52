@@ -332,13 +332,7 @@ void HydroManager::setIonPressureTensor(){
     string msg0 ="[HydroManager] start to calculate ion pressure tensor ";
     logger->writeMsg(msg0.c_str(), DEBUG);
     
-    int numOfSpecies = loader->getNumberOfSpecies();
-    int spn = numOfSpecies - 1;
-    VectorVar** densvel = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(spn));
-    
-    double pw = pusher->getParticleWeight4Type(spn);
-    double mass = pusher->getParticleMass4Type(spn);
-    
+    int numOfSpecies = loader->getNumberOfSpecies();        
     double pxx, pxy, pxz, pyy, pyz, pzz;
     double vx, vy, vz;
     
@@ -377,17 +371,27 @@ void HydroManager::setIonPressureTensor(){
     
     double* pos;
     double* vel;
-    
+    int type;
+    double pw, mass;
     for( idx = 0; idx < G2nodesNumber; idx++ ){
-        for(int comp = 0; comp < 6; comp++ ){
-            gridMgr->setVectorVariableForNodeG2(idx, IONPRESSURE, comp, 0.0);
+        for( type = 0; type < numOfSpecies; type++ ){
+            for( int comp = 0; comp < 6; comp++ ){
+                gridMgr->setVectorVariableForNodeG2(idx, gridMgr->ION_PRESSURE(type), comp, 0.0);
+            }
         }
     }
-    
+    map<int, VectorVar**> dens_vel;
+    for( type = 0; type < numOfSpecies; type++ ){
+            dens_vel[type] = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(type));
+    }
+
     for( idx=0; idx < totalPrtclNumber; idx++ ){
         
         pos  = particles[idx]->getPosition();
         vel  = particles[idx]->getVelocity();
+        type = particles[idx]->getType();
+        pw   = pusher->getParticleWeight4Type(type);
+        mass = pusher->getParticleMass4Type(type);
         
         x = 0.5*(pos[0]+pos[3]);
         y = 0.5*(pos[1]+pos[4]);
@@ -426,9 +430,9 @@ void HydroManager::setIonPressureTensor(){
             
             idxG2 = IDX(idx_x ,idx_y ,idx_z, xSizeG2, ySizeG2, zSizeG2);
             
-            vx = densvel[idxG2]->getValue()[1];
-            vy = densvel[idxG2]->getValue()[2];
-            vz = densvel[idxG2]->getValue()[3];
+            vx = dens_vel[type][idxG2]->getValue()[1];
+            vy = dens_vel[type][idxG2]->getValue()[2];
+            vz = dens_vel[type][idxG2]->getValue()[3];
             
             alpha = alphas[neigh_num];
             betta = bettas[neigh_num];
@@ -443,16 +447,18 @@ void HydroManager::setIonPressureTensor(){
             pyz = pw*mass*weight*(vel[1] - vy)*(vel[2] - vz);
             pzz = pw*mass*weight*(vel[2] - vz)*(vel[2] - vz);
             
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 0, pxx);
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 1, pxy);
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 2, pxz);
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 3, pyy);
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 4, pyz);
-            gridMgr->addVectorVariableForNodeG2(idxG2, IONPRESSURE, 5, pzz);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 0, pxx);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 1, pxy);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 2, pxz);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 3, pyy);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 4, pyz);
+            gridMgr->addVectorVariableForNodeG2(idxG2, gridMgr->ION_PRESSURE(type), 5, pzz);
         }
     }
     
-    gridMgr->applyBC(IONPRESSURE);
+    for( type = 0; type < numOfSpecies; type++ ){
+        gridMgr->applyBC(gridMgr->ION_PRESSURE(type));
+    }    
 
     auto end_time = high_resolution_clock::now();
     string msg ="[HydroManager] setIonPressureTensor()... duration = "

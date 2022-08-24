@@ -452,7 +452,7 @@ void ModelInitializer::initParticles(){
     double pos[3], vpb[3];
     vector<double> vel;
     vector<double> fluidVel;
-    double r1, r2;
+    double r1, r2;  
     
     
     if( totParticleNumberInDomain <= 0 ){
@@ -515,7 +515,7 @@ void ModelInitializer::initParticles(){
                                            pusher->getParticleWeight4Type(spn));
                     
                     
-                    for (ptclIDX=0; ptclIDX < requiredPrtclNum; ptclIDX++){
+                    for( ptclIDX = 0; ptclIDX < requiredPrtclNum; ptclIDX++ ){
                         
                         double ran1, ran2, ran3;
                         
@@ -536,45 +536,47 @@ void ModelInitializer::initParticles(){
                         pos[0] = (i + ran1) * cellSizeX + domainShiftX;
                         pos[1] = (j + ran2) * cellSizeY + domainShiftY;
                         pos[2] = (k + ran3) * cellSizeZ + domainShiftZ;
-                        
+
                         if( particle_idx >= totalPrtclNumber ){
                             string msg0011 ="[ModelInitializer] idx is out of preinitialized particles number: particle_idx = "+to_string(particle_idx);
                             logger->writeMsg(msg0011.c_str(),  DEBUG);
                         }
                         
-                        if( pos[0] < 0.0 || pos[1] < 0.0 || pos[2] < 0.0 ){
-                            throw runtime_error("position pos[0] = "+to_string(pos[0]));
-                        }
                         double pos2Save[6] = {pos[0], pos[1], pos[2], pos[0], pos[1], pos[2]};
                         pusher->setParticlePosition(particle_idx, pos2Save);
                         
                         pusher->setParticleType(particle_idx,  spn);
-
- 			if ( (loader->numOfSpots > 0) && (spn == (numOfSpecies-1)) ) {
-			    vel      = loader->getVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
-			    fluidVel = loader->getFluidVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
-                   	}else{
-			    vel      = loader->getVelocity(pos[0], pos[1], pos[2], spn);
-			    fluidVel = loader->getFluidVelocity(pos[0], pos[1], pos[2], spn);
-			}
-                    
-                        r1 = RNM;
-                        r2 = RNM;
-                        r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
-                        r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
-                        r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                        r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                        vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2)+fluidVel[0];
-                        vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2)+fluidVel[1];
-                    
-                        r1 = RNM;
-                        r2 = RNM;
-                        r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
-                        r2   = (fabs(r2 - 1.0) < EPS8) ? r2 - EPS8 : r2;
-                        r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                        r2   = (r2 > EPS8)? r2 : r2 + EPS8;
-                        vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2)+fluidVel[2];
+                        int distributionType = 0;
+ 			            if( (loader->numOfSpots > 0) && (spn == (numOfSpecies-1)) ) {
+			                 vel      = loader->getVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
+			                 fluidVel = loader->getFluidVelocity4InjectedParticles(pos[0], pos[1], pos[2]);
+                             distributionType = loader->getDFtype4InjectedParticles();
+                    	}else{
+			                 vel      = loader->getVelocity(pos[0], pos[1], pos[2], spn);
+			                 fluidVel = loader->getFluidVelocity(pos[0], pos[1], pos[2], spn);
+                             distributionType = loader->getDFtype(spn);
+			            }
                         
+                        if( distributionType == 0 ){
+                            r1 = RNM;
+                            r2 = RNM;
+                            r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
+                            r1   = (r1 > EPS8)? r1 : r1 + EPS8;
+                            vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2)+fluidVel[0];
+                            vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2)+fluidVel[1];
+                        
+                            r1 = RNM;
+                            r2 = RNM;
+                            r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
+                            r1   = (r1 > EPS8)? r1 : r1 + EPS8;
+                            vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2)+fluidVel[2];
+                        }else{
+                            vpb[0] = vel[0] * (1.0-2.0*RNM)+fluidVel[0];
+                            vpb[1] = vel[1] * (1.0-2.0*RNM)+fluidVel[1];
+                            vpb[2] = vel[2] * (1.0-2.0*RNM)+fluidVel[2];
+                        }
+
+                       
                         double vel2Save[6] = {vpb[0], vpb[1], vpb[2], vpb[0], vpb[1], vpb[2]};
                         pusher->setParticleVelocity(particle_idx, vel2Save);
                         

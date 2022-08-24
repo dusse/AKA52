@@ -47,6 +47,9 @@ private:
     std::set<std::string> checkedMethods;
     std::set<std::string> failMethods;
     
+    double  collisionFrequencyFactor;
+    double defaultCoulombLogarithm;
+
     PyObject *pInstance;
     
     double callPyFloatFunction( PyObject*, const std::string, const std::string );
@@ -128,11 +131,17 @@ public:
     int getMaxTimestepsNum();
     int getNumberOfSpecies();
     int getTimestepsNum2Write();
+
+    double getCollisionFrequencyFactor();
+    double getDefaultCoulombLogarithm();
     
     double getPPC4species(int);
     double getMass4species(int);
     double getCharge4species(int);
     int getIfSpeciesFrozen(int);
+
+    int getDFtype(int);
+    int getDFtype4InjectedParticles();
     
     std::string getOutputDir() const;
     std::string getFilenameTemplate();

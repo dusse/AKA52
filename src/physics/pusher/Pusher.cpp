@@ -19,6 +19,10 @@ Pusher::~Pusher(){
         delete particles[i];
     }
     delete[] particles;
+    delete[] weights;
+    delete[] charges;
+    delete[] masses;
+    delete[] iffrozens;
 }
                
 void Pusher::initialize(){
@@ -172,6 +176,10 @@ void Pusher::setIfParticleTypeIsFrozen(int type, int iffrozen){
                       +"] = "+to_string(iffrozen)).c_str(),  DEBUG);
 }
 
+int Pusher::getIfParticleTypeIsFrozen(int type){
+    return iffrozens[type];
+}
+
 int Pusher::getTotalParticleNumber(){
     return currentPartclNumOnDomain;
 }
@@ -226,6 +234,10 @@ Particle** Pusher::getParticles(){
 }
 
 
+vector<shared_ptr<Particle>> Pusher::getLeftParticles(){
+    return leftParticles;
+}
+
 void Pusher::push(int phase, int i_time){
     
    logger->writeMsg(("[Pusher] start pushing "+to_string(currentPartclNumOnDomain)
@@ -276,7 +288,6 @@ void Pusher::push(int phase, int i_time){
   
     VectorVar** Efield   = gridMgr->getVectorVariableOnG2(ELECTRIC);
     VectorVar** Bfield   = gridMgr->getVectorVariableOnG1(MAGNETIC);
-    VectorVar** currentJ = gridMgr->getVectorVariableOnG2(CURRENT);
     
     int G2nodesNumber = (xSize+2)*(ySize+2)*(zSize+2);
     int G1nodesNumber = (xSize+1)*(ySize+1)*(zSize+1);
@@ -472,7 +483,12 @@ void Pusher::push(int phase, int i_time){
     vector<shared_ptr<Particle>> particles2add;
     particles2add.reserve(EXPECTED_NUM_OF_PARTICLES);
         
+    
+    #ifdef WRITE_LEFT_PARTICLES
+    boundaryMgr->applyBC(particles, particles2add, leftParticles, phase);
+    #else
     boundaryMgr->applyBC(particles, particles2add, phase);
+    #endif
     vector<int> leavingParticles = boundaryMgr->getLeavingParticlesIdxs();
     int tot2add = particles2add.size();
     int tot2remove = leavingParticles.size();

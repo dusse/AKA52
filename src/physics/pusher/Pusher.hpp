@@ -38,8 +38,9 @@ private:
     double INITIAL_B_FIELD = 0.0;
     
     int currentPartclNumOnDomain = 0;
-    Particle** particles;
-    
+    Particle** particles;    
+    std::vector<std::shared_ptr<Particle>> leftParticles;
+       
     void initialize();
     
     int checkParticle(int, Particle*, std::string);
@@ -66,6 +67,7 @@ public:
     void setParticleCharge4Type(int, double);
     void setParticleMass4Type(int, double);
     void setIfParticleTypeIsFrozen(int, int);
+    int  getIfParticleTypeIsFrozen(int);
     void initParticles(int, int);
     void addParticles(std::vector<std::shared_ptr<Particle>>);
     
@@ -77,6 +79,7 @@ public:
     void checkEnergyBalance(int);
     
     Particle** getParticles();
+    std::vector<std::shared_ptr<Particle>> getLeftParticles();
     
 
 };

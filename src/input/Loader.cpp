@@ -27,13 +27,14 @@ const string  GET_PRESSURE_SMOOTH_STRIDE = "getElectronPressureSmoothingStride";
 const string  GET_VELOCITY = "getVelocity";
 const string  GET_FLUID_VELOCITY = "getFluidVelocity";
 const string  INJECTED_PARTICLES = "4InjectedParticles";
+const string  GET_DFTYPE = "getDFtype";
+const string  GET_DFTYPE4INJECTEDPARTICLES = "getDFtype4InjectedParticles";
 const string  GET_MASS   = "getMass";
 const string  GET_CHARGE = "getCharge";
 const string  GET_IFPARTICLETYPEISFROZEN = "getIfParticleTypeIsFrozen";
 const string  GET_PPC = "getPPC";
 const string  SPECIES   = "4species";
 const string  GET_PPC4LOADED_PARTICLES = "getPPC4loadedParticles";
-
 const string  GET_MPI_DOMAIN_NUM = "mpiDomainNum";
 
 const string  GET_MIN_DENS_4_PPC = "getMinimumDens2ResolvePPC";
@@ -51,6 +52,9 @@ const string  GET_INPUT_FILE = "getInputFile";
 
 const string  GET_RESISTIVITY = "getResistivity";
 const string  GET_BFIELD_LIMIT    = "getBfieldLimit";
+
+const string  GET_DEFAULT_COLOUMB_LOG = "getDefaultColoumbLogarithm";
+const string  GET_IONION_COLLISION_FREQUENCY_FACTOR = "getIonIonCollisionFrequencyFactor";
 
 const string  GET_ELECTRON_MASS  = "getElectronMass";
 const string  GET_RELAX_FACTOR   = "getRelaxFactor";
@@ -129,7 +133,7 @@ double Loader::callPyFloatFunction( PyObject* instance,
     if (checkMethodExistence(funcName, brackets) == METHOD_OK){
         return  PyFloat_AsDouble(getPyMethod(instance,funcName,brackets));
     }else{
- 	return 0.0;
+        return 0.0;
     }
 }
 
@@ -142,7 +146,7 @@ double Loader::callPyFloatFunctionWith3args( PyObject* instance,
         return  PyFloat_AsDouble(PyObject_CallMethod(instance,strdup(funcName.c_str()),
                                                 strdup(brackets.c_str()),x,y,z));
     }else{
- 	return 0.0;
+        return 0.0;
     } 
 }
 
@@ -188,11 +192,11 @@ PyObject* Loader::getPyMethod(PyObject* instance,
 int Loader::checkMethodExistence(const string funcName, const string brackets){
 
     if( checkedMethods.count(funcName) ){
-	return METHOD_OK;
+        return METHOD_OK;
     }
 
     if( failMethods.count(funcName) ){
-	return METHOD_FAIL;
+        return METHOD_FAIL;
     }
 
     string inputFilePath = string(getenv("INPUTFILEPATH"))+ INIT_CLASS_NAME + ".py";
@@ -467,12 +471,12 @@ void Loader::load(){
 
     }
     
-    
+    // needed for BoundaryManager.cpp
     if( boxSizes[0] != 1 && boxSizes[1] != 1 && boxSizes[2] != 1 ){
         this->dim = 3;
-    } else if( boxSizes[0] != 1 && boxSizes[1] != 1 ){
+    }else if( boxSizes[0] != 1 && boxSizes[1] != 1 ){
         this->dim = 2;
-    } else if( boxSizes[0] != 1 ){
+    }else{
         this->dim = 1;
     }
     
@@ -549,6 +553,29 @@ void Loader::load(){
                             +to_string(criticalPressure)+" (default)";
         logger.writeMsg(presMsg.c_str(), DEBUG);
     }
+
+    callMethod = getPyMethod( pInstance, GET_IONION_COLLISION_FREQUENCY_FACTOR, BRACKETS );
+    if( callMethod != NULL ){
+        this->collisionFrequencyFactor = PyFloat_AsDouble(callMethod);        
+        string collMsg = "[Loader] [IONION_COLLISIONS] collisionFrequencyFactor = "
+                                            +to_string(collisionFrequencyFactor);
+        logger.writeMsg(collMsg.c_str(), DEBUG);
+        callMethod = getPyMethod( pInstance, GET_DEFAULT_COLOUMB_LOG, BRACKETS );
+        if( callMethod != NULL ){
+            this->defaultCoulombLogarithm = PyFloat_AsDouble(callMethod);            
+        }else{
+            this->defaultCoulombLogarithm  = 25;
+        }
+        collMsg = "[Loader] [IONION_COLLISIONS] defaultCoulombLogarithm = "
+                                            +to_string(defaultCoulombLogarithm);
+        logger.writeMsg(collMsg.c_str(), DEBUG);
+    }else{
+        this->collisionFrequencyFactor = 0.0;
+        this->defaultCoulombLogarithm  = 25;
+    }
+     
+    
+    
     
     if( rank == 0 ){
 
@@ -599,19 +626,19 @@ void Loader::load(){
         msg = "[Loader] [OHM's LAW]: resistivity = "+to_string(resistivity);
         logger.writeMsg(msg.c_str(), INFO);
 
-	#ifdef USE_COLLISIONAL_RESIST_FACTOR
-	msg = "[Loader] [OHM's LAW]: temperature dependence (1/Te^1.5) factor for resistivity is ON";
-        logger.writeMsg(msg.c_str(), INFO);
-	#endif
+	    #ifdef USE_COLLISIONAL_RESIST_FACTOR
+	       msg = "[Loader] [OHM's LAW]: temperature dependence (1/Te^1.5) factor for resistivity is ON";
+           logger.writeMsg(msg.c_str(), INFO);
+	    #endif
         
         #ifdef USE_EDGE_FACTOR
         msg = "[Loader] [OHM's LAW]: edge factor for ohm's law terms (pressure and hall) is ON";
         logger.writeMsg(msg.c_str(), INFO);
         #endif
         
-	if( useIsothermalClosure == 1){	
-		msg = "[Loader] [PRESSURE]: you use isothermal electrons, electron temperature is "+to_string(electronTemperature);
-		logger.writeMsg(msg.c_str(), INFO);
+	    if( useIsothermalClosure == 1){	
+		  msg = "[Loader] [PRESSURE]: you use isothermal electrons, electron temperature is "+to_string(electronTemperature);
+		  logger.writeMsg(msg.c_str(), INFO);
         }else{
         #ifdef IMPLICIT_PRESSURE
 		msg = "[Loader] [PRESSURE]: you use implicit scheme ";
@@ -629,6 +656,14 @@ void Loader::load(){
         logger.writeMsg("[Loader] initialization...OK!", DEBUG);
     }
 
+}
+
+double  Loader::getCollisionFrequencyFactor(){
+    return collisionFrequencyFactor;
+}
+
+double  Loader::getDefaultCoulombLogarithm(){
+    return defaultCoulombLogarithm;
 }
 
 int Loader::getNumberOfSpecies(){
@@ -747,6 +782,15 @@ int Loader::getIfSpeciesFrozen( int speciesType ){
     return int(callPyFloatFunction( pInstance, varName, BRACKETS ));
 }
 
+int Loader::getDFtype(int speciesType){
+    string varName = GET_DFTYPE+SPECIES+to_string(speciesType+1);
+    return int(callPyFloatFunction( pInstance, varName, BRACKETS ));
+}
+
+int Loader::getDFtype4InjectedParticles(){
+    string varName = GET_DFTYPE4INJECTEDPARTICLES;
+    return int(callPyFloatFunction( pInstance, varName, BRACKETS ));
+}
 
 
 double Loader::getPPC4species(int speciesType){

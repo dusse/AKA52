@@ -14,10 +14,11 @@ Solver::Solver(shared_ptr<Loader> load,
                            shared_ptr<HydroManager> hydro,
                            shared_ptr<EleMagManager> em,
                            shared_ptr<ClosureManager> closure,
-                           shared_ptr<LaserMockManager> lm):loader(move(load)),
+                           shared_ptr<LaserMockManager> lm,
+                           shared_ptr<IonIonCollisionManager> cm):loader(move(load)),
                             gridMng(move(grid)), pusher(move(pshr)),
                             hydroMng(move(hydro)), emMng(move(em)),
-                            closureMng(move(closure)), laserMng(move(lm))
+                            closureMng(move(closure)), laserMng(move(lm)), collideMng(move(cm))
 {
     logger.reset(new Logger());
     
@@ -57,9 +58,13 @@ int Solver::solve(int i_time)
 void Solver::performCalculation(int PHASE, int i_time){
     logger->writeMsg("[Solver] in performCalculation()...", DEBUG);
     
+    if( loader->getCollisionFrequencyFactor() > 0.0 ){
+        collideMng->collideIons(PHASE);  
+    }
+
     pusher->push(PHASE, i_time);
     
-    if ( loader->numOfSpots > 0 ) {
+    if( loader->numOfSpots > 0 ){
         laserMng->addIons(i_time);
     }
     
@@ -70,7 +75,7 @@ void Solver::performCalculation(int PHASE, int i_time){
     
     closureMng->calculatePressure(PHASE, i_time);
     
-    if ( loader->numOfSpots > 0 ) {
+    if( loader->numOfSpots > 0 ){
         laserMng->accelerate(i_time);
     }
     
