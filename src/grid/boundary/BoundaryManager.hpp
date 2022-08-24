@@ -39,9 +39,7 @@ private:
     
     void initialize();
     int applyPeriodicBC(Particle*, int);
-    int  applyReflectBC(Particle*, int);
-    int  applyOutflowBC(Particle*, int);
-    int  applyOutflowBC(int);
+    int applyOutflowBC(int);
     
 public:
     
@@ -52,6 +50,7 @@ public:
     std::vector<int> getLeavingParticlesIdxs();
     void storeParticle(int, double[3]);
     void applyBC(Particle**, std::vector<std::shared_ptr<Particle>> &, int);
+    void applyBC(Particle**, std::vector<std::shared_ptr<Particle>> &, std::vector<std::shared_ptr<Particle>> &, int);
     
     
 };

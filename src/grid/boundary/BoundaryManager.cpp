@@ -199,26 +199,12 @@ void BoundaryManager::applyBC(Particle** particles,
             // need to send particle and need to remove from home domain
         }
         
-//        if ( applyOutflowBC(particles[idx], phase) == 1 ) {
-//            //no need to send particle but need to remove from home domain
-//            // just keep it in leaving set and do not serialize
-//            continue;
-//        }
         if ( applyOutflowBC(t) == 1 ) {
             //no need to send particle but need to remove from home domain
             // just keep it in leaving set and do not serialize
             outflowLeaving++;
             continue;
         }
-
-        
-        // reflect BCs are out-of-date
-//        if ( applyReflectBC(particles[idx], phase) == 1 ) {
-//            //no need to send particle no need to remove from home domain
-//            // remove from leaving set and do not serialize
-//            removeFromLeaving.push_back(ptclNum);
-//            continue;
-//        }
         
         if( t != 13 ){
             particles[idx]->serialize(sendBuf[t], PARTICLES_SIZE*partcls2send[t]);
@@ -273,28 +259,159 @@ void BoundaryManager::applyBC(Particle** particles,
 }
 
 
-int BoundaryManager::applyOutflowBC(Particle* particle, int phase){
+void BoundaryManager::applyBC(Particle** particles,
+                              vector<shared_ptr<Particle>> &particles2add,
+                              vector<shared_ptr<Particle>> &particlesLeft,
+                              int phase){
+    auto start_time = high_resolution_clock::now();
     
-    int remove = 0;
-    double* prtclPos = particle->getPosition();
-    int posShift = phase == CORRECTOR? 3 : 0;
-    double L, r0;
+    logger->writeMsg(("[BoundaryManager] applyBC .. leavingParticles = "
+                     +to_string(leavingParticles.size())).c_str(), DEBUG);
     
-    for (int i = 0; i < 3; i++) {
-        if ( loader->partclBCtype[i] == OUTFLOW_BC ){
-            L  = loader->boxSizes[i];
-            r0 = prtclPos[i+posShift];
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+    double domainXSize = loader->resolution[0];
+    double domainYSize = loader->resolution[1];
+    double domainZSize = loader->resolution[2];
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+    
+    double Lx = loader->boxSizes[0],
+           Ly = loader->boxSizes[1],
+           Lz = loader->boxSizes[2];
+    
+    int idx, t, a, b, c;
+    
+    double xloc, yloc, zloc;
+    double x0, y0, z0;
+    
+    double *sendBuf[27];
+    double *recvBuf[27];
+    int partcls2send[27];
+    int partcls2recv[27];
+    
+    for ( t = 0; t < 27; t++ ) {
+        sendBuf[t] = new double[domain2send[t]*PARTICLES_SIZE*sizeof(double)];
+        recvBuf[t] = new double[EXPECTED_NUM_OF_PARTICLES*PARTICLES_SIZE*sizeof(double)];
+        partcls2send[t] = 0;
+        partcls2recv[t] = EXPECTED_NUM_OF_PARTICLES;
+    }
+
+    double* prtclPos;
+    
+    vector<int> removeFromLeaving;
+    removeFromLeaving.reserve(leavingParticles.size());
+
+    int posShift = phase == CORRECTOR ? 3 : 0;
+    int outflowLeaving = 0;
+    
+    for ( int ptclNum = 0; ptclNum < leavingParticles.size(); ptclNum++ ){
+        idx = leavingParticles[ptclNum];
         
-            if (r0 < 0.0){
-                return 1;
-            }
-            if (r0 > L){
-                return 1;
-            }
+        prtclPos = particles[idx]->getPosition();
+        
+        x0 = prtclPos[0+posShift];
+        y0 = prtclPos[1+posShift];
+        z0 = prtclPos[2+posShift];
+        
+        //check whom to send
+        xloc = (x0 - domainShiftX)/domainXSize/dx;
+        yloc = (y0 - domainShiftY)/domainYSize/dy;
+        zloc = (z0 - domainShiftZ)/domainZSize/dz;
+        
+        switch (loader->dim) {
+            case 1:
+                a = (int) floor(xloc);
+                b = 0;
+                c = 0;
+                break;
+            case 2:
+                a = (int) floor(xloc);
+                b = (int) floor(yloc);
+                c = 0;
+                break;
+            case 3:
+                a = (int) floor(xloc);
+                b = (int) floor(yloc);
+                c = (int) floor(zloc);
+                break;
+                
+            default:
+                throw runtime_error("dimension is not 1/2/3");
+        }
+        
+        t = (1+c)+3*((1+b)+3*(1+a));
+         
+        if (  applyPeriodicBC(particles[idx], phase) == 1 ) {
+            // need to send particle and need to remove from home domain
+        }
+        
+        if ( applyOutflowBC(t) == 1 ) {
+            //no need to send particle but need to remove from home domain
+            // just keep it in leaving set and do not serialize
+            shared_ptr<Particle> pa(new Particle());
+            pa->reinitializeUsingParticle(particles[idx]);
+            particlesLeft.push_back(pa);
+
+            outflowLeaving++;
+
+            continue;
+        }
+        
+        if( t != 13 ){
+            particles[idx]->serialize(sendBuf[t], PARTICLES_SIZE*partcls2send[t]);
+            partcls2send[t] += 1;
+        } else {
+            removeFromLeaving.push_back(ptclNum);
         }
     }
-    return remove;
+    
+    for( int ptclNum = removeFromLeaving.size()-1; ptclNum >= 0 ; ptclNum-- ){
+        leavingParticles.erase(leavingParticles.begin()+removeFromLeaving[ptclNum]);
+    }
+    
+    string msd ="[BoundaryManager] total leaving = "+to_string(leavingParticles.size())
+    + " / outflowLeaving = " + to_string(outflowLeaving);
+    logger->writeMsg(msd.c_str(), DEBUG);
+    
+    MPI_Status st;
+    int receivedTot;
+    for ( t = 0; t < 27; t++ ){
+            if(t != 13){
+                
+                MPI_Sendrecv(sendBuf[t], PARTICLES_SIZE*sizeof(double)*partcls2send[t],
+                             MPI_DOUBLE, loader->neighbors2Send[t], t,
+                             recvBuf[t], PARTICLES_SIZE*sizeof(double)*partcls2recv[t],
+                             MPI_DOUBLE, loader->neighbors2Recv[t], t,
+                             MPI_COMM_WORLD, &st);
+                
+                MPI_Get_count(&st, MPI_DOUBLE, &receivedTot);
+                
+
+                receivedTot = receivedTot/PARTICLES_SIZE/sizeof(double);
+    
+                for (int ptclNum = 0; ptclNum < receivedTot; ptclNum++){
+                    particles2add.push_back(shared_ptr<Particle>(new Particle));
+                    int idxOfAdded = particles2add.size()-1;
+                    particles2add[idxOfAdded]->deserialize(recvBuf[t], PARTICLES_SIZE*ptclNum);
+                }
+                
+            }
+    }
+    
+    for ( t = 0; t < 27; t++ ) {
+                delete [] sendBuf[t];
+                delete [] recvBuf[t];
+    }
+    
+    auto end_time = high_resolution_clock::now();
+    string msg ="[BoundaryManager] apply BC duration = "
+    +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
+    logger->writeMsg(msg.c_str(),  DEBUG);
 }
+
 
 int BoundaryManager::applyOutflowBC(int sendTo){
     
@@ -361,49 +478,6 @@ int BoundaryManager::applyPeriodicBC(Particle* particle, int phase){
         }
     }
     return period;
-}
-
-
-
-
-
-//reflect coordinates
-int BoundaryManager::applyReflectBC(Particle* particle, int phase){
-    
-    double* prtclPos = particle->getPosition();
-    double* prtclVel = particle->getVelocity();
-    
-    int shift = phase == CORRECTOR? 3 : 0;
-    
-    double L, r0, V0;
-    int revert = 0;
-    for ( int i = 0; i < 3; i++) {
-        if ( loader->partclBCtype[i] == REFLECT_BC ){
-            
-            L  = loader->boxSizes[i];
-            r0 = prtclPos[i+shift];
-            V0 = prtclVel[i+shift];
-            
-            if ( r0 < 0.0 ) {
-                particle->setPosition(i+3, -r0);
-                particle->setVelocity(i+3, -V0);
-                particle->setPosition(i, -r0);
-                particle->setVelocity(i, -V0);
-                revert = 1;
-            }
-            
-            if ( r0 >= L ) {
-                particle->setPosition(i+3, -r0 + 2*L);
-                particle->setVelocity(i+3, -V0);
-                particle->setPosition(i, -r0 + 2*L);
-                particle->setVelocity(i, -V0);
-                revert = 1;
-            }
-           
-        }
-    }
-    
-    return revert;
 }
 
 

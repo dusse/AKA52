@@ -75,7 +75,12 @@ void GridManager::initialize(){
 
     int numOfSpecies = loader->getNumberOfSpecies();
     
-    nodesG2vars = new VectorVar*[G2nodesNumber*(NUM_OF_MAIN_G2VARS+2*numOfSpecies)];
+    #ifdef GET_ION_PRESSURE
+        nodesG2vars = new VectorVar*[G2nodesNumber*(NUM_OF_MAIN_G2VARS+3*numOfSpecies)];
+    #else
+        nodesG2vars = new VectorVar*[G2nodesNumber*(NUM_OF_MAIN_G2VARS+2*numOfSpecies)];
+    #endif
+    
     nodesG1vars = new VectorVar*[G1nodesNumber*2];
     
     initG1Nodes();
@@ -609,12 +614,14 @@ void GridManager::initG2Nodes(){
                 VectorVar* pdriver_aux = new VectorVar(DRIVER_AUX,    {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* driver_cross = new VectorVar(DRIVER_CROSS, {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
                 VectorVar* driver_diag = new VectorVar(DRIVER_DIAG,   {0.0, 0.0, 0.0});
-                VectorVar* resistivity = new VectorVar(RESISTIVITY,   {0.0, 0.0});
-                VectorVar* ionpresure  = new VectorVar(IONPRESSURE,   {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
-                
-                
-                
+                VectorVar* resistivity = new VectorVar(RESISTIVITY,   {0.0, 0.0, 0.0});
+                                
+
                 totVarsOnG2 = NUM_OF_MAIN_G2VARS+2*numOfSpecies;
+
+                #ifdef GET_ION_PRESSURE
+                totVarsOnG2 = NUM_OF_MAIN_G2VARS+3*numOfSpecies;
+                #endif
                 
                 nodesG2vars[G2nodesNumber*ELECTRIC+    idx] = ele; humanG2VarNames.push_back("e");
                 nodesG2vars[G2nodesNumber*ELECTRIC_AUX+idx] = ele_aux; humanG2VarNames.push_back("eaux");
@@ -631,26 +638,32 @@ void GridManager::initG2Nodes(){
                 nodesG2vars[G2nodesNumber*DRIVER_CROSS+idx] = driver_cross; humanG2VarNames.push_back("pdrcr");
                 nodesG2vars[G2nodesNumber*DRIVER_DIAG +idx] = driver_diag; humanG2VarNames.push_back("pdrdiag");
                 nodesG2vars[G2nodesNumber*RESISTIVITY +idx] = resistivity; humanG2VarNames.push_back("eta");
-                nodesG2vars[G2nodesNumber*IONPRESSURE +idx] = ionpresure; humanG2VarNames.push_back("pi");
-                
+                              
                 
                 SHIFT_MAIN_DENS = NUM_OF_MAIN_G2VARS;
                 SHIFT_MAIN_DENS_AUX  = SHIFT_MAIN_DENS+numOfSpecies;
                 
-                for(int spn = 0; spn<numOfSpecies;spn++){
+                for( int spn = 0; spn < numOfSpecies; spn++ ){
                     VectorVar* densvel = new VectorVar(DENS_VEL(spn), {0.0, 0.0, 0.0, 0.0});
                     VectorVar* densaux = new VectorVar(DENS_AUX(spn), {0.0});
                     
                     nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS    +spn)+idx] = densvel; 
                     nodesG2vars[G2nodesNumber*(SHIFT_MAIN_DENS_AUX+spn)+idx] = densaux; 
                 }
-		for(int spn = 0; spn<numOfSpecies;spn++){
-			humanG2VarNames.push_back("nv"+to_string(spn+1));
-		}
-		for(int spn = 0; spn<numOfSpecies;spn++){
-			humanG2VarNames.push_back("nvaux"+to_string(spn+1));
-		}
-                
+		        for( int spn = 0; spn < numOfSpecies; spn++ ){
+			         humanG2VarNames.push_back("nv"+to_string(spn+1));
+		        }
+		        for( int spn = 0; spn < numOfSpecies; spn++ ){
+			         humanG2VarNames.push_back("nvaux"+to_string(spn+1));
+		        }
+
+                #ifdef GET_ION_PRESSURE
+                SHIFT_MAIN_ION_PRES  = SHIFT_MAIN_DENS_AUX+numOfSpecies;
+                for( int spn = 0; spn < numOfSpecies; spn++ ){
+                    VectorVar* ionpresure = new VectorVar(ION_PRESSURE(spn), {0.0, 0.0, 0.0, 0.0, 0.0, 0.0});
+                    nodesG2vars[G2nodesNumber*(SHIFT_MAIN_ION_PRES+spn)+idx] = ionpresure; humanG2VarNames.push_back("pi"+to_string(spn+1));
+                }
+                #endif
             }
         }
     }
@@ -669,9 +682,8 @@ int GridManager::DENS_VEL(int sp){
     return SHIFT_MAIN_DENS+sp;
 }
 
-void GridManager::applyBC4G1(int varName){
-    
-
+int GridManager::ION_PRESSURE(int sp){
+    return SHIFT_MAIN_ION_PRES+sp;
 }
 
 void GridManager::applyBC(int varName){
@@ -1578,13 +1590,15 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     int xResG2 = xRes+2, yResG2 = yRes+2, zResG2 = zRes+2;
     vector<vector<VectorVar>> result;
     result.reserve(xRes*yRes*zRes);
-    int i,j,k;
+    int i,j,k, type;
     
-    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, PRESSURE_SMO, DRIVER_CROSS, DRIVER_DIAG, RESISTIVITY, IONPRESSURE};
+    set<int> stopList = {ELECTRIC_AUX, CURRENT, VELOCELE, DRIVER, DRIVER_AUX, PRESSURE_AUX, 
+                            PRESSURE_SMO, DRIVER_CROSS, DRIVER_DIAG, RESISTIVITY};
     int numOfSpecies = loader->getNumberOfSpecies();
     
-    for( i = 0; i < numOfSpecies; i++ ){
-        stopList.insert(DENS_AUX(i));
+    for( type = 0; type < numOfSpecies; type++ ){
+        stopList.insert(DENS_AUX(type));
+        stopList.insert(ION_PRESSURE(type));
     }
     
     for( i = 0; i < xRes; i++ ){
@@ -1599,23 +1613,26 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
                         continue;
                     }
                     allVars.push_back(*nodesG2vars[G2nodesNumber*varN+idxG2]);
-
-		    if (need2Fill == 0) outputVarNames.push_back(humanG2VarNames[varN]);                    
+		            if (need2Fill == 0) outputVarNames.push_back(humanG2VarNames[varN]);                    
                 }
                 allVars.push_back(*nodesG1vars[G1nodesNumber*MAGNETIC+idxG1]);
- 		if (need2Fill == 0) outputVarNames.push_back("b");
+ 		        if (need2Fill == 0) outputVarNames.push_back("b");
 
                 #ifdef USE_COLLISIONAL_RESIST_FACTOR
-                allVars.push_back(*nodesG2vars[G2nodesNumber*RESISTIVITY+idxG2]);
- 		if (need2Fill == 0) outputVarNames.push_back("eta");
+                    allVars.push_back(*nodesG2vars[G2nodesNumber*RESISTIVITY+idxG2]);
+ 		            if (need2Fill == 0) outputVarNames.push_back("eta");
                 #endif
 
                 #ifdef GET_ION_PRESSURE
-                allVars.push_back(*nodesG2vars[G2nodesNumber*IONPRESSURE+idxG2]);
- 		if (need2Fill == 0) outputVarNames.push_back("pi");
+                        for( type = 0; type < numOfSpecies; type++ ){
+                            if( loader->getIfSpeciesFrozen(type) == 0 ){
+                                allVars.push_back(*nodesG2vars[G2nodesNumber*ION_PRESSURE(type)+idxG2]);
+                                if (need2Fill == 0) outputVarNames.push_back("pi"+to_string(type+1));
+                            }
+                        }                    
                 #endif
 
-		need2Fill = 1;
+		        need2Fill = 1;
                 result.push_back(allVars);
             }
         }

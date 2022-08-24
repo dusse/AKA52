@@ -39,6 +39,8 @@ private:
 public:
    Writer(std::shared_ptr<Loader>, std::shared_ptr<GridManager>, std::shared_ptr<Pusher>);
    void write(int);
+   void writeParticles(int);
+   void writeLeftParticles(int);
    void writeAllForRestart();
 };
 #endif /* Writer_hpp */

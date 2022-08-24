@@ -19,6 +19,7 @@
 #include "../physics/electro-magnetic/EleMagManager.hpp"
 #include "../physics/pressure-closure/ClosureManager.hpp"
 #include "../physics/laser/LaserMockManager.hpp"
+#include "../physics/collisions/IonIonCollisionManager.hpp"
 
 
 const static int  SOLVE_OK   = 0;
@@ -38,6 +39,7 @@ private:
     std::shared_ptr<EleMagManager> emMng;
     std::shared_ptr<ClosureManager> closureMng;
     std::shared_ptr<LaserMockManager> laserMng;
+    std::shared_ptr<IonIonCollisionManager> collideMng;
     
     
     void performCalculation(int, int);
@@ -47,7 +49,7 @@ public:
     Solver(std::shared_ptr<Loader>, std::shared_ptr<GridManager>,
                  std::shared_ptr<Pusher>, std::shared_ptr<HydroManager>,
                  std::shared_ptr<EleMagManager>, std::shared_ptr<ClosureManager>,
-                 std::shared_ptr<LaserMockManager>);
+                 std::shared_ptr<LaserMockManager>, std::shared_ptr<IonIonCollisionManager>);
         
     void initialize();
     int solve(int);

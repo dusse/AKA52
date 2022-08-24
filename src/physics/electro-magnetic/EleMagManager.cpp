@@ -506,22 +506,22 @@ void EleMagManager::calculateEnext(int phase){
                 
                         wei  = WEIHTS[neighbour];
                     
-			//dx
-			curPcomp = compIDX[coord][0];   
-			left = negbors4PresX[18*idxG2+2*neighbour+0];
+                        //dx
+                        curPcomp = compIDX[coord][0];   
+                        left = negbors4PresX[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresX[18*idxG2+2*neighbour+1];
-			                     	
+                    
                         divP[coord] += (presEle[left]->getValue()[curPcomp]
                                     -presEle[rigt]->getValue()[curPcomp])*wei*0.25/dx;
-			    
-			//dy                   
+                    
+                        //dy
                         curPcomp = compIDX[coord][1];
                         left = negbors4PresY[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresY[18*idxG2+2*neighbour+1];
                         divP[coord] += (presEle[left]->getValue()[curPcomp]
                                     -presEle[rigt]->getValue()[curPcomp])*wei*0.25/dy;
-                	
-			//dz
+                
+                        //dz
                         curPcomp = compIDX[coord][2];
                         left = negbors4PresZ[18*idxG2+2*neighbour+0];
                         rigt = negbors4PresZ[18*idxG2+2*neighbour+1];
@@ -541,37 +541,36 @@ void EleMagManager::calculateEnext(int phase){
                 ideal[1] = -(velI[2]*locB[0] - velI[0]*locB[2]);
                 ideal[2] = -(velI[0]*locB[1] - velI[1]*locB[0]);
                 
-                double resist = loader->resistivity;
-		
+                double resistX = loader->resistivity, resistY = resistX, resistZ = resistX;
 
-		#ifdef USE_COLLISIONAL_RESIST_FACTOR
-                	double Pxx = presEle[idxG2]->getValue()[0];
-                	double Pyy = presEle[idxG2]->getValue()[3];
-                	double Pzz = presEle[idxG2]->getValue()[5];
-                	double trP = (Pxx+Pyy+Pzz)/3;
-                	double dens2use = dension[idxG2]->getValue()[0];
-			double resistCollisionalFactor = pow(dens2use, 1.5)/pow(trP, 1.5);
-			double presFactor = edgeProfilePressure(trP);
-			resist *= resistCollisionalFactor*presFactor;
-			gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 0, resist);
-			gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 1, presFactor);
-		#endif
+                #ifdef USE_COLLISIONAL_RESIST_FACTOR
+                    double Pxx = presEle[idxG2]->getValue()[0];
+                    double Pyy = presEle[idxG2]->getValue()[3];
+                    double Pzz = presEle[idxG2]->getValue()[5];
+                    double dens2use = dension[idxG2]->getValue()[0];
+                    resistX *= pow(dens2use/Pxx*edgeProfilePressure(Pxx), 1.5);
+                    resistY *= pow(dens2use/Pyy*edgeProfilePressure(Pyy), 1.5);
+                    resistZ *= pow(dens2use/Pzz*edgeProfilePressure(Pzz), 1.5);
+                    gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 0, dens2use/Pxx*edgeProfilePressure(Pxx));
+                    gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 1, dens2use/Pyy*edgeProfilePressure(Pyy));
+                    gridMgr->setVectorVariableForNodeG2(idxG2, RESISTIVITY, 2, dens2use/Pzz*edgeProfilePressure(Pzz));
+                #endif
                                 
                 
                 locE[0] = - (velI[1]*locB[2] - velI[2]*locB[1])
                           + (   J[1]*locB[2] -    J[2]*locB[1])*revertdens
                           - divP[0]*revertdens
-                          + resist*J[0];
+                          + resistX*J[0];
                 
                 locE[1] = - (velI[2]*locB[0] - velI[0]*locB[2])
                           + (   J[2]*locB[0] -    J[0]*locB[2])*revertdens
                           - divP[1]*revertdens
-                          + resist*J[1];
+                          + resistY*J[1];
                 
                 locE[2] = - (velI[0]*locB[1] - velI[1]*locB[0])
                           + (   J[0]*locB[1] -    J[1]*locB[0])*revertdens
                           - divP[2]*revertdens
-                          + resist*J[2];
+                          + resistZ*J[2];
                 
                 for ( coord = 0; coord < 3; coord++ ) {
                     if( abs(locE[coord]) < cellBreakdownEfield[coord] ){

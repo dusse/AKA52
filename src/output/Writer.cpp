@@ -108,6 +108,168 @@ void Writer::writeParallel(hid_t fileID, hid_t group, hid_t dxpl_id,
     H5Sclose(filespace);
 }
 
+
+
+void Writer::writeParticles(int fileNum){
+    auto start_time = high_resolution_clock::now();
+    logger->writeMsg("[Writer] writing particles ...", DEBUG);
+    int rank ;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Info info = MPI_INFO_NULL;
+    
+    int coresNum;
+    MPI_Comm_size(MPI_COMM_WORLD, &coresNum);
+    int* particlesPerCore = new int[coresNum];
+    Particle** particles = pusher->getParticles();
+    int totalPrtclNumber = pusher->getTotalParticleNumber();
+    int totalUnfrozenPrtclNumber = 0;
+    int idx, type;
+    for( idx = 0; idx < totalPrtclNumber; idx++ ){
+        type = particles[idx]->getType();
+        if( loader->getIfSpeciesFrozen(type) == 0 ){
+            totalUnfrozenPrtclNumber++;
+        }
+    }
+    MPI_Allgather(&totalUnfrozenPrtclNumber, 1, MPI_INT, particlesPerCore, 1, MPI_INT, MPI_COMM_WORLD);
+
+    int partoffset = 0, partglob = 0;
+    for( int coreNum = 0; coreNum < coresNum; coreNum++ ){
+        partglob += particlesPerCore[coreNum];
+        if( coreNum < rank ){
+            partoffset += particlesPerCore[coreNum];
+        }
+    }
+    delete[] particlesPerCore;
+    
+    hid_t access = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(access, MPI_COMM_WORLD, info);
+    
+    string fileName = outputDir + fileNamePattern +  "particles_"+ to_string(fileNum)+".h5";
+    hid_t fileID = H5Fcreate(fileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, access);
+    
+    const string groupname = "/vars";
+    hid_t group   = H5Gcreate(fileID, groupname.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    
+    hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
+ 
+    const int SHORT_PARTICLE_SIZE = 7;
+    double* particles2save = new double[SHORT_PARTICLE_SIZE*totalUnfrozenPrtclNumber];
+    double* prtclPos;
+    double* prtclVel;
+    int ind2Write = 0;
+    for( idx = 0; idx < totalPrtclNumber; idx++ ){
+            prtclPos = particles[idx]->getPosition();
+            prtclVel = particles[idx]->getVelocity();
+            type     = particles[idx]->getType();
+            if( loader->getIfSpeciesFrozen(type) == 0 ){
+                int shift = SHORT_PARTICLE_SIZE*ind2Write;
+                particles2save[shift+0] = type;
+                particles2save[shift+1] = 0.5*(prtclPos[0]+prtclPos[3]);
+                particles2save[shift+2] = 0.5*(prtclPos[1]+prtclPos[4]);
+                particles2save[shift+3] = 0.5*(prtclPos[2]+prtclPos[5]);
+                particles2save[shift+4] = 0.5*(prtclVel[0]+prtclVel[3]);
+                particles2save[shift+5] = 0.5*(prtclVel[1]+prtclVel[4]);
+                particles2save[shift+6] = 0.5*(prtclVel[2]+prtclVel[5]);
+                ind2Write++;
+            }
+    }
+
+    writeParallelWithOffset(fileID, group, dxpl_id, "particles", particles2save,
+                            SHORT_PARTICLE_SIZE*totalUnfrozenPrtclNumber,
+                            SHORT_PARTICLE_SIZE*partglob,
+                            SHORT_PARTICLE_SIZE*partoffset);
+
+    
+    H5Fflush(fileID, H5F_SCOPE_GLOBAL);
+    delete[] particles2save;    
+    H5Gclose(group);
+    H5Pclose(dxpl_id);   
+    H5Fclose(fileID);    
+    
+    auto end_time = high_resolution_clock::now();
+    string msg ="[Writer] writing particles duration = "
+    +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
+    logger->writeMsg(msg.c_str(), DEBUG);
+}
+
+void Writer::writeLeftParticles(int fileNum){
+    auto start_time = high_resolution_clock::now();
+    // logger->writeMsg("[Writer] writing left particles ...", DEBUG);
+    int idx, type;
+    int rank, coresNum ;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Info info = MPI_INFO_NULL;    
+    MPI_Comm_size(MPI_COMM_WORLD, &coresNum);
+
+    int* particlesPerCore = new int[coresNum];
+    vector<shared_ptr<Particle>> particles = pusher->getLeftParticles();
+    int totalPrtclNumber = particles.size();
+    logger->writeMsg(("[Writer] writing left particles ... total left particles number = "
+        +to_string(totalPrtclNumber)).c_str(), DEBUG);
+    if( totalPrtclNumber < 10) return;
+    int totalLeftPrtclNumber = totalPrtclNumber;
+    MPI_Allgather(&totalLeftPrtclNumber, 1, MPI_INT, particlesPerCore, 1, MPI_INT, MPI_COMM_WORLD);
+
+    int partoffset = 0, partglob = 0;
+    for( int coreNum = 0; coreNum < coresNum; coreNum++ ){
+        partglob += particlesPerCore[coreNum];
+        if( coreNum < rank ){
+            partoffset += particlesPerCore[coreNum];
+        }
+    }
+    delete[] particlesPerCore;
+    
+    hid_t access = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(access, MPI_COMM_WORLD, info);
+    
+    string fileName = outputDir + fileNamePattern +  "left_particles_"+ to_string(fileNum)+".h5";
+    hid_t fileID = H5Fcreate(fileName.c_str(), H5F_ACC_TRUNC, H5P_DEFAULT, access);
+    
+    const string groupname = "/vars";
+    hid_t group   = H5Gcreate(fileID, groupname.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    
+    hid_t dxpl_id = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(dxpl_id, H5FD_MPIO_COLLECTIVE);
+ 
+    const int SHORT_PARTICLE_SIZE = 7;
+    double* particles2save = new double[SHORT_PARTICLE_SIZE*totalLeftPrtclNumber];
+    double* prtclPos;
+    double* prtclVel;
+    int ind2Write = 0;
+    for( idx = 0; idx < totalPrtclNumber; idx++ ){
+            prtclPos = particles[idx]->getPosition();
+            prtclVel = particles[idx]->getVelocity();
+            type     = particles[idx]->getType();
+            int shift = SHORT_PARTICLE_SIZE*idx;
+            particles2save[shift+0] = type;
+            particles2save[shift+1] = prtclPos[0];
+            particles2save[shift+2] = prtclPos[1];
+            particles2save[shift+3] = prtclPos[2];
+            particles2save[shift+4] = prtclVel[0];
+            particles2save[shift+5] = prtclVel[1];
+            particles2save[shift+6] = prtclVel[2];            
+    }
+    
+    writeParallelWithOffset(fileID, group, dxpl_id, "particles", particles2save,
+                            SHORT_PARTICLE_SIZE*totalLeftPrtclNumber,
+                            SHORT_PARTICLE_SIZE*partglob,
+                            SHORT_PARTICLE_SIZE*partoffset);
+
+    
+    H5Fflush(fileID, H5F_SCOPE_GLOBAL);
+    delete[] particles2save;    
+    H5Gclose(group);
+    H5Pclose(dxpl_id);   
+    H5Fclose(fileID);    
+    
+    auto end_time = high_resolution_clock::now();
+    string msg ="[Writer] writing left particles duration = "
+    +to_string(duration_cast<milliseconds>(end_time - start_time).count())+" ms";
+    logger->writeMsg(msg.c_str(), DEBUG);
+}
+
+
 void Writer::writeParallelWithOffset(hid_t fileID, hid_t group, hid_t dxpl_id,
                                    string dsetName , const double* data,
                                      int sizeLoc, int sizeGlob, int off){
