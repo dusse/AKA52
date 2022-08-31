@@ -1598,7 +1598,9 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
     
     for( type = 0; type < numOfSpecies; type++ ){
         stopList.insert(DENS_AUX(type));
-        stopList.insert(ION_PRESSURE(type));
+        #ifdef GET_ION_PRESSURE
+            stopList.insert(ION_PRESSURE(type));
+        #endif
     }
     
     for( i = 0; i < xRes; i++ ){
@@ -1613,7 +1615,7 @@ vector<vector<VectorVar>> GridManager::getVectorVariablesForAllNodes(){
                         continue;
                     }
                     allVars.push_back(*nodesG2vars[G2nodesNumber*varN+idxG2]);
-		            if (need2Fill == 0) outputVarNames.push_back(humanG2VarNames[varN]);                    
+		            if (need2Fill == 0) outputVarNames.push_back(humanG2VarNames[varN]);
                 }
                 allVars.push_back(*nodesG1vars[G1nodesNumber*MAGNETIC+idxG1]);
  		        if (need2Fill == 0) outputVarNames.push_back("b");
