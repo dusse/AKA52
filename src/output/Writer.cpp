@@ -207,7 +207,6 @@ void Writer::writeLeftParticles(int fileNum){
     int totalPrtclNumber = particles.size();
     logger->writeMsg(("[Writer] writing left particles ... total left particles number = "
         +to_string(totalPrtclNumber)).c_str(), DEBUG);
-    if( totalPrtclNumber < 10) return;
     int totalLeftPrtclNumber = totalPrtclNumber;
     MPI_Allgather(&totalLeftPrtclNumber, 1, MPI_INT, particlesPerCore, 1, MPI_INT, MPI_COMM_WORLD);
 
