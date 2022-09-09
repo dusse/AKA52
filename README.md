@@ -35,8 +35,11 @@ _______________________
 5. for visualization use python notebook in folder NOTEBOOK/    
 
 6. to run it in supercomputer, e.g. Niagara
+    
     `source compile_aka52_niagara.sh`
+    
     edit the `makefile` accordingly, like step 1
+    
     then `make`
 
 ___________________________________

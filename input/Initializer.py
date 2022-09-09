@@ -10,7 +10,7 @@ class Initializer:
         
         # BOX
         dx = 0.2
-        self.boxSize    = [20.0, 10.0, dx] # in d0 - ion inertia length
+        self.boxSize    = [60.0, 20.0, dx] # in d0 - ion inertia length
         self.boxSizePxl = [self.boxSize[0]/dx, self.boxSize[1]/dx, 1]
 
         self.pxSize = self.boxSize[0]/self.boxSizePxl[0]
@@ -21,46 +21,49 @@ class Initializer:
         
         self.dampingBoundaryWidth = [[1,2], [0,0], [0,0]]
          
-        self.mpiCores  = [1,2,1]
+        self.mpiCores  = [8,4,1]
         
         # time
         self.ts = 0.005
-        self.maxtsnum = 4001
-        self.outputStride = 400
+        self.maxtsnum = 8001
+        self.outputStride = 800
 
         # output. need to create it before
-        self.outputDir = "output/"
-        self.fileTemplate = "free_2d_"
+        self.outputDir = "/gpfs/fs1/home/a/anticipa/weipeng/scratch/Data_aka52/stream/output/"
+        self.fileTemplate = "test_"
     
         # Particles
         self.ppc4load = 30
-        self.ppc = [30, 1]
+        self.ppc = [10, 10]
         self.ppcMinDens = 1.0
 
         self.numOfSpecies = 2
-        self.masses  = [1, 1]
-        self.charges = [1, 1]
-        self.dens = [10.0, 1.0]
-        self.vel1 = 0.1
+        self.masses  = [1, 20]   # [mp]
+        self.charges = [1, 10]   # [qe]
+        self.dens = [0.1, 1.0] # [nc]
+        self.vel1 = 0.1         # [c?] -> ~ 5 MeV
         self.vfl1 = [0.0,0.0,0.0]
         self.vel2 = 0.0
         self.vfl2 = [0.0,0.0,0.0]
+
+        self.DFtype4species1 = 1           # 1 - rectangular distribution function, since v1.6
+        self.DFtype4InjectedParticles = 1  # same above
        
-        self.Pele0 = 0.0000001
-        self.trgtwidth = 2.0
+        self.Pele0 = 0.0000001  # [nc*eV?]
+        self.trgtwidth = 2.0    # [di]
         # Laser spots
         self.spotsNum = 1                
 
-        self.type2Load = 2
-        self.thermVion = 0.1
+        self.type2Load = 2      # [?]
+        self.thermVion = 0.1    # [c?]
 	
-        self.vfl2Load = [1.,0.0,0.0]	
+        self.vfl2Load = [1.,0.0,0.0] # [?]	
 
         self.dens2sustain = self.dens[1]
     
         #magnetic field magnitude
-        self.Bfield = [1.0, 0.0, 0.0]
-        
+        self.Bfield = [0.00625, 0.0, 0.0] # [so that wce = wpe? 1e18 cc -> 320 T; 1e19 cc -> 1000 T]
+                                          # [B = 20 T & ne = 1e20 cc -> B_norm = 0.00625]   
         #ohm's law
         self.resistivity = 0.0
 
@@ -74,6 +77,9 @@ class Initializer:
         self.ZERO = 0.0
         self.PI = 3.14159265358979323846
         self.FROZEN = 1
+
+ 
+
     
     
     
@@ -311,6 +317,15 @@ class Initializer:
         else:
             return self.ZERO
 
+    #v1.6 change distribution function of particle specie to rectangular
+    def getDFtype4species1(self, x, y, z):
+        return 1
+        # return self.DFtype4species1  # to be better formatted.
+
+    def getDFtype4InjectedParticles(self, x, y, z):
+        return 1
+        # return self.DFtype4InjectedParticles  
+
 
     # smooth polynom by roch smets 2014 PoP
     def polynomByRochSmets(self, x): # x = |x|
@@ -358,6 +373,14 @@ class Initializer:
     #   physics: isothemal closure : electron temperature
     def getElectronTemperature4IsothermalClosure(self):
         return self.Pele0
+
+
+    #   v1.6 physics: ion-ion collisions:
+    def getDefaultColoumbLogarithm(self):
+        return 10
+
+    def getIonIonCollisionFrequencyFactor(self):
+        return 1    
 
 
 
