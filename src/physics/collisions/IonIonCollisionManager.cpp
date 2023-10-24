@@ -70,6 +70,34 @@ void IonIonCollisionManager::collideIons(int phase){
             dens_vel[type] = gridMgr->getVectorVariableOnG2(gridMgr->DENS_VEL(type));
     }
 
+    double domainShiftX = loader->boxCoordinates[0][0];
+    double domainShiftY = loader->boxCoordinates[1][0];
+    double domainShiftZ = loader->boxCoordinates[2][0];
+
+    double dx = loader->spatialSteps[0];
+    double dy = loader->spatialSteps[1];
+    double dz = loader->spatialSteps[2];
+
+    double G2shift = 0.5;
+    double x,y,z;
+    int i,j,k;
+    for( idx = 0; idx < totalPrtclNumber; idx++ ){
+        
+        pos  = particles[idx]->getPosition();
+        type = particles[idx]->getType();
+
+        x = pos[0+velShift];
+        y = pos[1+velShift];
+        z = pos[2+velShift];
+
+        i = (int)((x - domainShiftX)/dx+G2shift);// G2 index
+        j = (int)((y - domainShiftY)/dy+G2shift);
+        k = (int)((z - domainShiftZ)/dz+G2shift);
+        
+        idxG2 = IDX(i ,j ,k, xSizeG2, ySizeG2, zSizeG2);
+        particlesNumber[numOfSpecies*idxG2+type] += 1;
+        particlesInEachCell[idxG2][type].push_back(idx);
+    }  
     int ptclIdx, ion1idx, ion2idx;
     double dens1, dens2;
     double pw1, pw2;
