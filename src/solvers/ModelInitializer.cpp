@@ -366,9 +366,6 @@ void ModelInitializer::initVariablesonG2(){
         localMaximumDens = locMAX4species[spn];
         MPI_Allreduce(&localMaximumDens, &globalMaximumDens, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
         
-        if( globalMinimumDens <= 0.0 ){
-            globalMinimumDens = localMaximumDens > 0.0 ? localMaximumDens : globalMaximumDens;
-        }
         
         if( globalMinimumDens <= loader->minimumDens2ResolvePPC ){
             globalMinimumDens = loader->minimumDens2ResolvePPC;
