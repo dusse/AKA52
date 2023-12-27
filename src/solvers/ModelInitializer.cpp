@@ -559,14 +559,14 @@ void ModelInitializer::initParticles(){
                             r2 = RNM;
                             r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
                             r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                            vpb[0] = sqrt(-2*log(r1))*vel[0] * cos(2*PI*r2)+fluidVel[0];
-                            vpb[1] = sqrt(-2*log(r1))*vel[1] * sin(2*PI*r2)+fluidVel[1];
+                            vpb[0] = sqrt(-log(r1))*vel[0] * cos(2*PI*r2)+fluidVel[0];
+                            vpb[1] = sqrt(-log(r1))*vel[1] * sin(2*PI*r2)+fluidVel[1];
                         
                             r1 = RNM;
                             r2 = RNM;
                             r1   = (fabs(r1 - 1.0) < EPS8) ? r1 - EPS8 : r1;
                             r1   = (r1 > EPS8)? r1 : r1 + EPS8;
-                            vpb[2] = sqrt(-2*log(r1))*vel[2] * cos(2*PI*r2)+fluidVel[2];
+                            vpb[2] = sqrt(-log(r1))*vel[2] * cos(2*PI*r2)+fluidVel[2];
                         }else{
                             vpb[0] = vel[0] * (1.0-2.0*RNM)+fluidVel[0];
                             vpb[1] = vel[1] * (1.0-2.0*RNM)+fluidVel[1];
