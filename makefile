@@ -1,9 +1,7 @@
-
-HDF5_PATH=…
-MPI_PATH=…
-PYTHON27_INC=…
-PYTHON27_LIB=…
-
+HDF5_PATH=$(MODULE_HDF5_PREFIX)
+MPI_PATH=$(MODULE_OPENMPI_PREFIX)
+PYTHON27_INC=$(SCINET_PYTHON_ROOT)/include/python2.7
+PYTHON27_LIB=$(SCINET_PYTHON_ROOT)/lib
 
 
 LIBS=-lpython2.7 -lhdf5
@@ -53,7 +51,7 @@ $(_EXEN) : $(_OBJS)
 	@echo ' '
 
 %.o : %.cpp
-	$(CXX) $(INCLUDES) -o $@ $< $(CXXFLAGS) $(FLAGS)
+	$(CXX) $(INCLUDES) -o $@ -c $< $(CXXFLAGS) $(FLAGS)
 
 
 clean :
